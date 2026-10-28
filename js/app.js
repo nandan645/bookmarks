@@ -544,11 +544,28 @@ folderForm.addEventListener('submit', async (e) => {
   const name = document.getElementById('folderName').value.trim();
   const color = document.getElementById('folderColor').value;
 
+  if (!name) return;
+
+  // Frontend check: Check if folder with same name already exists for current user
+  const alreadyExists = folders.some(
+    f => f.owner_id === currentUser.id && f.name.trim().toLowerCase() === name.toLowerCase()
+  );
+
+  if (alreadyExists) {
+    alert(`A folder named "${name}" already exists.`);
+    return;
+  }
+
   try {
     const { error } = await client
       .from('folders')
       .insert([{ name, color, owner_id: currentUser.id }]);
-    if (error) throw error;
+    if (error) {
+      if (error.code === '23505') {
+        throw new Error(`A folder named "${name}" already exists.`);
+      }
+      throw error;
+    }
 
     folderModal.classList.remove('open');
     showToast(`Folder "${name}" created`);
