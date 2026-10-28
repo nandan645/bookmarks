@@ -65,12 +65,13 @@ const bookmarkForm = document.getElementById('bookmarkForm');
 const folderForm = document.getElementById('folderForm');
 const shareForm = document.getElementById('shareForm');
 
-// Share modal elements
-const shareLinkUrl = document.getElementById('shareLinkUrl');
-const copyShareLinkBtn = document.getElementById('copyShareLinkBtn');
-const pendingRequestsSection = document.getElementById('pendingRequestsSection');
-const pendingRequestsBadge = document.getElementById('pendingRequestsBadge');
-const pendingRequestsList = document.getElementById('pendingRequestsList');
+// Notification Bell Elements
+const notifBellBtn = document.getElementById('notifBellBtn');
+const notifBadge = document.getElementById('notifBadge');
+const notifDropdown = document.getElementById('notifDropdown');
+const notifDropdownCount = document.getElementById('notifDropdownCount');
+const notifRequestsList = document.getElementById('notifRequestsList');
+let allPendingRequests = [];
 
 // Helper: Toast
 function showToast(message) {
@@ -328,7 +329,7 @@ async function loadGuestBookmarks() {
 // Data Fetching (Authenticated Owner / Member)
 // -----------------------------------------------------------------------------
 async function loadInitialData() {
-  await Promise.all([loadFolders(), loadBookmarks()]);
+  await Promise.all([loadFolders(), loadBookmarks(), loadAllNotifications()]);
 }
 
 async function loadFolders() {
@@ -1047,6 +1048,109 @@ document.querySelectorAll('.modal-backdrop').forEach(modal => {
 
 document.getElementById('addBookmarkBtn').addEventListener('click', () => openBookmarkModal());
 document.getElementById('createFolderBtn').addEventListener('click', () => openFolderModal());
+
+// -----------------------------------------------------------------------------
+// Top Notification Bell & Global Access Requests
+// -----------------------------------------------------------------------------
+notifBellBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const isOpen = notifDropdown.style.display === 'block';
+  notifDropdown.style.display = isOpen ? 'none' : 'block';
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBellBtn')) {
+    notifDropdown.style.display = 'none';
+  }
+});
+
+async function loadAllNotifications() {
+  if (!currentUser) return;
+  try {
+    const { data, error } = await client
+      .from('folder_access_requests')
+      .select('*, folders(name, owner_id)')
+      .eq('status', 'pending');
+
+    if (error) throw error;
+    allPendingRequests = data || [];
+    renderNotifications();
+  } catch (err) {
+    console.error("Error loading notifications:", err);
+  }
+}
+
+function renderNotifications() {
+  if (allPendingRequests.length === 0) {
+    notifBadge.style.display = 'none';
+    notifDropdownCount.textContent = '0 pending';
+    notifRequestsList.innerHTML = '<p style="font-size:0.78rem; color:var(--text-dim); text-align:center; padding: 1.25rem 0;">No pending requests</p>';
+    return;
+  }
+
+  notifBadge.textContent = allPendingRequests.length;
+  notifBadge.style.display = 'inline-flex';
+  notifDropdownCount.textContent = `${allPendingRequests.length} pending`;
+  notifRequestsList.innerHTML = '';
+
+  allPendingRequests.forEach(req => {
+    const folderName = req.folders ? req.folders.name : 'Folder';
+    const item = document.createElement('div');
+    item.style.cssText = 'background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.55rem; display: flex; flex-direction: column; gap: 0.4rem;';
+
+    item.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.4rem;">
+        <div style="min-width: 0;">
+          <div style="font-weight: 600; font-size: 0.8rem; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            ${escapeHtml(req.requester_email)}
+          </div>
+          <div style="font-size: 0.72rem; color: var(--text-dim);">
+            wants access to <strong>${escapeHtml(folderName)}</strong>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 2px;">
+        <select class="form-control notif-role-select" style="font-size: 0.74rem; padding: 2px 4px; height: 26px; width: 85px;">
+          <option value="viewer" ${req.requested_role === 'viewer' ? 'selected' : ''}>Viewer</option>
+          <option value="editor" ${req.requested_role === 'editor' ? 'selected' : ''}>Editor</option>
+        </select>
+        <div style="display: flex; gap: 0.3rem;">
+          <button class="btn btn-secondary notif-reject-btn" style="font-size: 0.72rem; padding: 3px 6px;">Dismiss</button>
+          <button class="btn btn-primary notif-approve-btn" style="font-size: 0.72rem; padding: 3px 8px;">Approve</button>
+        </div>
+      </div>
+    `;
+
+    // Approve handler directly from notification dropdown
+    item.querySelector('.notif-approve-btn').addEventListener('click', async () => {
+      const grantedRole = item.querySelector('.notif-role-select').value;
+      const { error: appErr } = await client.rpc('approve_folder_request', {
+        request_id: req.id,
+        granted_role: grantedRole
+      });
+
+      if (appErr) {
+        alert(appErr.message);
+      } else {
+        showToast(`Approved ${req.requester_email} as ${grantedRole}`);
+        await Promise.all([loadAllNotifications(), loadFolders()]);
+      }
+    });
+
+    // Reject handler
+    item.querySelector('.notif-reject-btn').addEventListener('click', async () => {
+      const { error: delErr } = await client.from('folder_access_requests').delete().eq('id', req.id);
+      if (delErr) {
+        alert(delErr.message);
+      } else {
+        showToast('Request dismissed');
+        await loadAllNotifications();
+      }
+    });
+
+    notifRequestsList.appendChild(item);
+  });
+}
 
 function escapeHtml(str) {
   if (!str) return '';
