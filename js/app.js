@@ -294,17 +294,92 @@ guestCheckAgainBtn.addEventListener('click', () => {
 async function startGuestSession() {
   guestScreen.style.display = 'none';
   userEmailEl.textContent = `${guestFolderContext.email} (${guestFolderContext.role})`;
-  logoutBtn.title = "Exit Shared Folder";
+  logoutBtn.title = "Exit Shared View";
 
-  // Hide owner navigation sections in guest mode
+  // Hide owner general navigation (All Links, Favorites, Shared)
   document.querySelector('.nav-section').style.display = 'none';
-  document.querySelector('.nav-section:nth-of-type(2)').style.display = 'none';
+  // Hide create folder button (+) for guests - guests cannot create or edit folders
+  const createFolderBtn = document.getElementById('createFolderBtn');
+  if (createFolderBtn) createFolderBtn.style.display = 'none';
+
+  // Only editors get Add Link button
   if (guestFolderContext.role !== 'editor') {
     document.getElementById('addBookmarkBtn').style.display = 'none';
+  } else {
+    document.getElementById('addBookmarkBtn').style.display = 'inline-flex';
   }
 
-  viewTitle.textContent = guestFolderContext.folderName;
-  await loadGuestBookmarks();
+  // Load all shared folders for this guest email
+  await loadGuestFolders();
+}
+
+async function loadGuestFolders() {
+  try {
+    const { data, error } = await client.rpc('get_guest_shared_folders', {
+      guest_email: guestFolderContext.email
+    });
+
+    if (error) throw error;
+    folders = (data || []).map(f => ({
+      ...f,
+      owner_id: null // guest is not owner
+    }));
+
+    renderGuestFolders();
+
+    // Select the target folder or first folder
+    const currentFolder = folders.find(f => f.id === guestFolderContext.folderId) || folders[0];
+    if (currentFolder) {
+      guestFolderContext.folderId = currentFolder.id;
+      guestFolderContext.role = currentFolder.role;
+      guestFolderContext.folderName = currentFolder.name;
+      viewTitle.textContent = currentFolder.name;
+      if (currentFolder.role !== 'editor') {
+        document.getElementById('addBookmarkBtn').style.display = 'none';
+      } else {
+        document.getElementById('addBookmarkBtn').style.display = 'inline-flex';
+      }
+    }
+
+    await loadGuestBookmarks();
+  } catch (err) {
+    console.error("Error loading guest folders:", err);
+  }
+}
+
+function renderGuestFolders() {
+  folderListEl.innerHTML = '';
+  
+  folders.forEach(f => {
+    const item = document.createElement('div');
+    item.className = `folder-item ${guestFolderContext.folderId === f.id ? 'active' : ''}`;
+    
+    item.innerHTML = `
+      <div class="folder-meta" style="flex: 1;">
+        <span class="folder-color-dot" style="background-color: ${f.color || '#18181b'}"></span>
+        <span class="folder-name-text">${escapeHtml(f.name)}</span>
+        <span style="font-size: 0.7rem; color: var(--text-dim); margin-left: auto;">${f.role}</span>
+      </div>
+    `;
+
+    item.addEventListener('click', async () => {
+      guestFolderContext.folderId = f.id;
+      guestFolderContext.role = f.role;
+      guestFolderContext.folderName = f.name;
+      viewTitle.textContent = f.name;
+
+      if (f.role !== 'editor') {
+        document.getElementById('addBookmarkBtn').style.display = 'none';
+      } else {
+        document.getElementById('addBookmarkBtn').style.display = 'inline-flex';
+      }
+
+      renderGuestFolders();
+      await loadGuestBookmarks();
+    });
+
+    folderListEl.appendChild(item);
+  });
 }
 
 async function loadGuestBookmarks() {
@@ -553,6 +628,8 @@ function renderBookmarks() {
       .filter(Boolean);
 
     const isOwner = currentUser && (b.owner_id === currentUser.id);
+    const canEditAsGuest = guestFolderContext && (guestFolderContext.role === 'editor');
+    const showEditActions = isOwner || canEditAsGuest;
 
     card.innerHTML = `
       <div class="bookmark-card-top">
@@ -587,7 +664,7 @@ function renderBookmarks() {
           <button class="icon-btn-mini copy-btn" title="Copy Link">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
           </button>
-          ${isOwner ? `
+          ${showEditActions ? `
             <button class="icon-btn-mini edit-btn" title="Edit">
               <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </button>
@@ -721,6 +798,35 @@ bookmarkForm.addEventListener('submit', async (e) => {
   const selectedFolderIds = Array.from(activeModalFolderIds);
 
   try {
+    // If saving in Guest mode
+    if (guestFolderContext) {
+      if (editingBookmarkId) {
+        const { error } = await client.rpc('guest_update_bookmark', {
+          bm_id: editingBookmarkId,
+          f_id: guestFolderContext.folderId,
+          guest_email: guestFolderContext.email,
+          bm_url: url,
+          bm_title: title,
+          bm_desc: description
+        });
+        if (error) throw error;
+        showToast('Link updated');
+      } else {
+        const { error } = await client.rpc('guest_add_bookmark', {
+          f_id: guestFolderContext.folderId,
+          guest_email: guestFolderContext.email,
+          bm_url: url,
+          bm_title: title,
+          bm_desc: description
+        });
+        if (error) throw error;
+        showToast('Link added');
+      }
+      bookmarkModal.classList.remove('open');
+      await loadGuestBookmarks();
+      return;
+    }
+
     let bookmarkId = editingBookmarkId;
 
     if (editingBookmarkId) {
@@ -758,11 +864,7 @@ bookmarkForm.addEventListener('submit', async (e) => {
     }
 
     bookmarkModal.classList.remove('open');
-    if (guestFolderContext) {
-      await loadGuestBookmarks();
-    } else {
-      await loadBookmarks();
-    }
+    await loadBookmarks();
   } catch (err) {
     alert(err.message || 'Error saving link');
   }
@@ -785,6 +887,18 @@ async function toggleFavorite(b) {
 async function deleteBookmark(id) {
   if (!confirm('Delete this link?')) return;
   try {
+    if (guestFolderContext) {
+      const { error } = await client.rpc('guest_delete_bookmark', {
+        bm_id: id,
+        f_id: guestFolderContext.folderId,
+        guest_email: guestFolderContext.email
+      });
+      if (error) throw error;
+      showToast('Link deleted');
+      await loadGuestBookmarks();
+      return;
+    }
+
     const { error } = await client.from('bookmarks').delete().eq('id', id);
     if (error) throw error;
     showToast('Link deleted');
