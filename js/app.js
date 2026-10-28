@@ -120,7 +120,22 @@ authForm.addEventListener('submit', async (e) => {
     if (isSignUp) {
       const { data, error } = await client.auth.signUp({ email, password });
       if (error) throw error;
-      showToast('Account created! Logging in...');
+
+      // Check if Supabase requires email confirmation before a session is issued
+      if (data && data.user && (!data.session || (data.user.identities && data.user.identities.length === 0))) {
+        alert('Account created! Please check your email inbox and click the verification link before signing in.');
+        showToast('Check your email to verify your account');
+        // Switch back to Sign In mode
+        isSignUp = false;
+        authModeTitle.textContent = "Sign In";
+        authSubmitBtn.textContent = "Sign In";
+        authToggleBtn.textContent = "Need an account? Sign Up";
+        authPasswordInput.value = '';
+      } else if (data && data.session) {
+        showToast('Welcome! Logging in...');
+      } else {
+        alert('Please check your email to confirm your account before signing in.');
+      }
     } else {
       const { data, error } = await client.auth.signInWithPassword({ email, password });
       if (error) throw error;
