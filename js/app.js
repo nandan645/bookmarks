@@ -129,6 +129,20 @@ async function loadFolders() {
 
     if (error) throw error;
     folders = folderData || [];
+
+    // Ensure user has a Global folder created if not already
+    let globalFolder = folders.find(f => f.owner_id === currentUser.id && f.name.toLowerCase() === 'global');
+    if (!globalFolder) {
+      const { data: newG, error: gErr } = await client
+        .from('folders')
+        .insert([{ name: 'Global', color: '#18181b', owner_id: currentUser.id }])
+        .select('*, folder_members(shared_with_email, role)')
+        .single();
+      if (!gErr && newG) {
+        folders.unshift(newG);
+      }
+    }
+
     renderFolders();
     populateFolderCheckboxes();
   } catch (err) {
@@ -206,14 +220,22 @@ function populateFolderCheckboxes(selectedIds = []) {
     return;
   }
 
+  // Find user's Global folder ID
+  const globalFolder = folders.find(f => f.owner_id === currentUser.id && f.name.toLowerCase() === 'global');
+  const globalId = globalFolder ? globalFolder.id : null;
+
   folders.forEach(f => {
     const label = document.createElement('label');
     label.className = 'folder-check-item';
-    const checked = selectedIds.includes(f.id) ? 'checked' : '';
+    const isGlobal = (f.id === globalId);
+    // If global, always checked
+    const checked = (isGlobal || selectedIds.includes(f.id)) ? 'checked' : '';
+    const disabled = isGlobal ? 'disabled' : '';
+
     label.innerHTML = `
-      <input type="checkbox" value="${f.id}" ${checked}>
+      <input type="checkbox" value="${f.id}" ${checked} ${disabled}>
       <span class="folder-color-dot" style="background-color: ${f.color || '#18181b'}"></span>
-      <span>${escapeHtml(f.name)}</span>
+      <span>${escapeHtml(f.name)} ${isGlobal ? '<em style="color:var(--text-dim); font-size:0.75rem;">(Default)</em>' : ''}</span>
     `;
     folderCheckboxesEl.appendChild(label);
   });
@@ -423,9 +445,15 @@ bookmarkForm.addEventListener('submit', async (e) => {
   const title = document.getElementById('bmTitle').value.trim();
   const description = document.getElementById('bmDesc').value.trim();
 
-  // Get selected folder checkboxes
+  // Get selected folder checkboxes (including disabled ones like Global)
   const checkedBoxes = folderCheckboxesEl.querySelectorAll('input[type="checkbox"]:checked');
   const selectedFolderIds = Array.from(checkedBoxes).map(cb => cb.value);
+
+  // Always ensure Global folder ID is included
+  const globalFolder = folders.find(f => f.owner_id === currentUser.id && f.name.toLowerCase() === 'global');
+  if (globalFolder && !selectedFolderIds.includes(globalFolder.id)) {
+    selectedFolderIds.push(globalFolder.id);
+  }
 
   try {
     let bookmarkId = editingBookmarkId;
