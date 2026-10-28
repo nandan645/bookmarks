@@ -256,15 +256,11 @@ guestRequestForm.addEventListener('submit', async (e) => {
   guestRequestBtn.textContent = 'Submitting...';
 
   try {
-    const { error } = await client
-      .from('folder_access_requests')
-      .upsert([{
-        folder_id: targetFolderId,
-        requester_email: email,
-        requested_role: requestedRole,
-        status: 'pending',
-        updated_at: new Date().toISOString()
-      }], { onConflict: 'folder_id,requester_email' });
+    const { error } = await client.rpc('submit_folder_access_request', {
+      f_id: targetFolderId,
+      req_email: email,
+      req_role: requestedRole
+    });
 
     if (error) throw error;
 
