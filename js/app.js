@@ -20,7 +20,14 @@ const authPasswordInput = document.getElementById('authPassword');
 const authModeTitle = document.getElementById('authModeTitle');
 const authSubmitBtn = document.getElementById('authSubmitBtn');
 const authToggleBtn = document.getElementById('authToggleBtn');
+const authToggleContainer = document.getElementById('authToggleContainer');
+const otpVerifyForm = document.getElementById('otpVerifyForm');
+const otpSentEmail = document.getElementById('otpSentEmail');
+const otpTokenInput = document.getElementById('otpTokenInput');
+const otpVerifyBtn = document.getElementById('otpVerifyBtn');
+const otpCancelBtn = document.getElementById('otpCancelBtn');
 let isSignUp = false;
+let pendingSignUpEmail = '';
 
 // Guest Access Elements
 const guestFolderTitle = document.getElementById('guestFolderTitle');
@@ -142,32 +149,24 @@ authForm.addEventListener('submit', async (e) => {
 
   try {
     if (isSignUp) {
-      // Determine redirection URL for email confirmation
-      const redirectUrl = window.location.origin + window.location.pathname.replace(/\/([^\/]*)$/, '/') + 'verified.html';
-
       const { data, error } = await client.auth.signUp({
         email,
-        password,
-        options: {
-          emailRedirectTo: redirectUrl
-        }
+        password
       });
       if (error) throw error;
 
-      // Check if Supabase requires email confirmation before a session is issued
+      // Check if user requires OTP / email confirmation
       if (data && data.user && (!data.session || (data.user.identities && data.user.identities.length === 0))) {
-        alert('Account created! Please check your email inbox and click the verification link before signing in.');
-        showToast('Check your email to verify your account');
-        // Switch back to Sign In mode
-        isSignUp = false;
-        authModeTitle.textContent = "Sign In";
-        authSubmitBtn.textContent = "Sign In";
-        authToggleBtn.textContent = "Need an account? Sign Up";
-        authPasswordInput.value = '';
+        pendingSignUpEmail = email;
+        otpSentEmail.textContent = email;
+        authForm.style.display = 'none';
+        authToggleContainer.style.display = 'none';
+        otpVerifyForm.style.display = 'block';
+        otpTokenInput.value = '';
+        otpTokenInput.focus();
+        showToast('Confirmation code sent to your email!');
       } else if (data && data.session) {
         showToast('Welcome! Logging in...');
-      } else {
-        alert('Please check your email to confirm your account before signing in.');
       }
     } else {
       const { data, error } = await client.auth.signInWithPassword({ email, password });
@@ -179,6 +178,45 @@ authForm.addEventListener('submit', async (e) => {
     authSubmitBtn.disabled = false;
     authSubmitBtn.textContent = isSignUp ? 'Sign Up' : 'Sign In';
   }
+});
+
+// OTP Verification Form Handler
+otpVerifyForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const token = otpTokenInput.value.trim();
+  if (!token) return;
+
+  otpVerifyBtn.disabled = true;
+  otpVerifyBtn.textContent = 'Verifying...';
+
+  try {
+    const { data, error } = await client.auth.verifyOtp({
+      email: pendingSignUpEmail,
+      token: token,
+      type: 'signup'
+    });
+
+    if (error) throw error;
+
+    showToast('Email verified successfully! Logging you in...');
+    // Supabase will automatically fire onAuthStateChange with the session
+  } catch (err) {
+    alert(err.message || 'Invalid or expired code. Please try again.');
+  } finally {
+    otpVerifyBtn.disabled = false;
+    otpVerifyBtn.textContent = 'Verify & Enter';
+  }
+});
+
+otpCancelBtn.addEventListener('click', () => {
+  otpVerifyForm.style.display = 'none';
+  authForm.style.display = 'block';
+  authToggleContainer.style.display = 'block';
+  isSignUp = false;
+  authModeTitle.textContent = "Sign In";
+  authSubmitBtn.textContent = "Sign In";
+  authToggleBtn.textContent = "Need an account? Sign Up";
+  authPasswordInput.value = '';
 });
 
 logoutBtn.addEventListener('click', async () => {
