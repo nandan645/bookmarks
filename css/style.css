@@ -385,6 +385,7 @@ body {
   flex-direction: column;
   gap: 0.65rem;
   transition: var(--transition);
+  cursor: pointer;
 }
 
 .bookmark-card:hover {

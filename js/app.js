@@ -376,15 +376,33 @@ function renderBookmarks() {
       </div>
     `;
 
-    card.querySelector('.fav-btn').addEventListener('click', () => toggleFavorite(b));
-    card.querySelector('.copy-btn').addEventListener('click', () => {
+    // Action events (stop propagation so clicking action buttons doesn't trigger card navigation)
+    card.querySelector('.fav-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFavorite(b);
+    });
+    card.querySelector('.copy-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
       navigator.clipboard.writeText(b.url);
       showToast('Link copied');
     });
-    card.querySelector('.edit-btn').addEventListener('click', () => openBookmarkModal(b));
+    card.querySelector('.edit-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openBookmarkModal(b);
+    });
     if (b.owner_id === currentUser.id) {
-      card.querySelector('.del-btn').addEventListener('click', () => deleteBookmark(b.id));
+      card.querySelector('.del-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteBookmark(b.id);
+      });
     }
+
+    // Clicking anywhere on the card opens the link directly
+    card.addEventListener('click', (e) => {
+      // If clicking directly on an anchor or inside buttons, let native/button handler handle it
+      if (e.target.closest('button, a')) return;
+      window.open(b.url, '_blank', 'noopener,noreferrer');
+    });
 
     bookmarkGrid.appendChild(card);
   });
