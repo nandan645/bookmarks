@@ -124,7 +124,7 @@ async function loadInitialData() {
 
 async function loadFolders() {
   try {
-    const { data: folderData, error } = await supabase
+    const { data: folderData, error } = await client
       .from('folders')
       .select('*, folder_members(shared_with_email, role)')
       .order('created_at', { ascending: true });
@@ -140,7 +140,7 @@ async function loadFolders() {
 
 async function loadBookmarks() {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('bookmarks')
       .select('*')
       .order('created_at', { ascending: false });
@@ -436,14 +436,14 @@ bookmarkForm.addEventListener('submit', async (e) => {
 
   try {
     if (editingBookmarkId) {
-      const { error } = await supabase
+      const { error } = await client
         .from('bookmarks')
         .update({ url, title, description, tags, folder_id, updated_at: new Date().toISOString() })
         .eq('id', editingBookmarkId);
       if (error) throw error;
       showToast('Bookmark updated!');
     } else {
-      const { error } = await supabase
+      const { error } = await client
         .from('bookmarks')
         .insert([{
           owner_id: currentUser.id,
@@ -466,7 +466,7 @@ bookmarkForm.addEventListener('submit', async (e) => {
 
 async function toggleFavorite(b) {
   try {
-    const { error } = await supabase
+    const { error } = await client
       .from('bookmarks')
       .update({ is_favorite: !b.is_favorite })
       .eq('id', b.id);
@@ -505,7 +505,7 @@ folderForm.addEventListener('submit', async (e) => {
   const color = document.getElementById('folderColor').value;
 
   try {
-    const { error } = await supabase
+    const { error } = await client
       .from('folders')
       .insert([{ name, color, owner_id: currentUser.id }]);
     if (error) throw error;
@@ -554,7 +554,7 @@ async function refreshMemberList() {
   listEl.innerHTML = '<p style="font-size:0.8rem; color:var(--text-dim)">Loading members...</p>';
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('folder_members')
       .select('*')
       .eq('folder_id', activeSharingFolder.id);
@@ -607,7 +607,7 @@ shareForm.addEventListener('submit', async (e) => {
   }
 
   try {
-    const { error } = await supabase
+    const { error } = await client
       .from('folder_members')
       .insert([{
         folder_id: activeSharingFolder.id,
