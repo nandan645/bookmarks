@@ -1,4 +1,5 @@
 // App State
+const client = window.supabaseClient;
 let currentUser = null;
 let bookmarks = [];
 let folders = [];
@@ -82,11 +83,11 @@ authForm.addEventListener('submit', async (e) => {
 
   try {
     if (isSignUp) {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await client.auth.signUp({ email, password });
       if (error) throw error;
       showToast('Account created! Logging you in...', 'success');
     } else {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
       if (error) throw error;
     }
   } catch (err) {
@@ -98,11 +99,11 @@ authForm.addEventListener('submit', async (e) => {
 });
 
 logoutBtn.addEventListener('click', async () => {
-  await supabase.auth.signOut();
+  await client.auth.signOut();
 });
 
 // Watch Auth State
-supabase.auth.onAuthStateChange(async (event, session) => {
+client.auth.onAuthStateChange(async (event, session) => {
   if (session && session.user) {
     currentUser = session.user;
     userEmailEl.textContent = currentUser.email;
@@ -480,7 +481,7 @@ async function toggleFavorite(b) {
 async function deleteBookmark(id) {
   if (!confirm('Are you sure you want to delete this bookmark?')) return;
   try {
-    const { error } = await supabase.from('bookmarks').delete().eq('id', id);
+    const { error } = await client.from('bookmarks').delete().eq('id', id);
     if (error) throw error;
     showToast('Bookmark deleted');
     await loadBookmarks();
@@ -520,7 +521,7 @@ folderForm.addEventListener('submit', async (e) => {
 async function deleteFolder(folderId, name) {
   if (!confirm(`Delete folder "${name}"? Bookmarks inside it will remain in root.`)) return;
   try {
-    const { error } = await supabase.from('folders').delete().eq('id', folderId);
+    const { error } = await client.from('folders').delete().eq('id', folderId);
     if (error) throw error;
     showToast('Folder deleted');
     if (currentFilter.folderId === folderId) {
@@ -580,7 +581,7 @@ async function refreshMemberList() {
       `;
 
       row.querySelector('.remove-share-btn').addEventListener('click', async () => {
-        const { error: delErr } = await supabase.from('folder_members').delete().eq('id', m.id);
+        const { error: delErr } = await client.from('folder_members').delete().eq('id', m.id);
         if (delErr) alert(delErr.message);
         else {
           showToast('Access revoked');
