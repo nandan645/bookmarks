@@ -1,15 +1,19 @@
 // App State
 const client = window.supabaseClient;
 let currentUser = null;
+let guestFolderContext = null; // { folderId, email, role, folderName }
 let bookmarks = [];
 let folders = [];
 let currentFilter = {
-  folderId: 'all', // 'all', 'favorites', 'shared', or specific UUID
+  folderId: 'all',
   searchQuery: ''
 };
 
-// UI Elements
+// UI Elements - Screens
 const authScreen = document.getElementById('authScreen');
+const guestScreen = document.getElementById('guestScreen');
+
+// Auth Form Elements
 const authForm = document.getElementById('authForm');
 const authEmailInput = document.getElementById('authEmail');
 const authPasswordInput = document.getElementById('authPassword');
@@ -18,6 +22,24 @@ const authSubmitBtn = document.getElementById('authSubmitBtn');
 const authToggleBtn = document.getElementById('authToggleBtn');
 let isSignUp = false;
 
+// Guest Access Elements
+const guestFolderTitle = document.getElementById('guestFolderTitle');
+const guestFolderSubtitle = document.getElementById('guestFolderSubtitle');
+const guestCheckStep = document.getElementById('guestCheckStep');
+const guestCheckForm = document.getElementById('guestCheckForm');
+const guestEmailInput = document.getElementById('guestEmailInput');
+const guestCheckBtn = document.getElementById('guestCheckBtn');
+const guestRequestStep = document.getElementById('guestRequestStep');
+const guestRequestForm = document.getElementById('guestRequestForm');
+const guestReqEmail = document.getElementById('guestReqEmail');
+const guestReqRole = document.getElementById('guestReqRole');
+const guestRequestBtn = document.getElementById('guestRequestBtn');
+const guestBackBtn = document.getElementById('guestBackBtn');
+const guestRequestedSuccess = document.getElementById('guestRequestedSuccess');
+const guestMailtoLink = document.getElementById('guestMailtoLink');
+const guestCheckAgainBtn = document.getElementById('guestCheckAgainBtn');
+
+// Dashboard UI Elements
 const userEmailEl = document.getElementById('userEmail');
 const logoutBtn = document.getElementById('logoutBtn');
 const bookmarkGrid = document.getElementById('bookmarkGrid');
@@ -43,6 +65,13 @@ const bookmarkForm = document.getElementById('bookmarkForm');
 const folderForm = document.getElementById('folderForm');
 const shareForm = document.getElementById('shareForm');
 
+// Share modal elements
+const shareLinkUrl = document.getElementById('shareLinkUrl');
+const copyShareLinkBtn = document.getElementById('copyShareLinkBtn');
+const pendingRequestsSection = document.getElementById('pendingRequestsSection');
+const pendingRequestsBadge = document.getElementById('pendingRequestsBadge');
+const pendingRequestsList = document.getElementById('pendingRequestsList');
+
 // Helper: Toast
 function showToast(message) {
   const container = document.getElementById('toastContainer');
@@ -55,6 +84,12 @@ function showToast(message) {
     setTimeout(() => toast.remove(), 200);
   }, 2500);
 }
+
+// -----------------------------------------------------------------------------
+// Check for URL Parameter (e.g. ?folder=<id>)
+// -----------------------------------------------------------------------------
+const urlParams = new URLSearchParams(window.location.search);
+const targetFolderId = urlParams.get('folder');
 
 // -----------------------------------------------------------------------------
 // Authentication
@@ -98,6 +133,11 @@ authForm.addEventListener('submit', async (e) => {
 });
 
 logoutBtn.addEventListener('click', async () => {
+  if (guestFolderContext) {
+    localStorage.removeItem('guest_email');
+    window.location.href = window.location.pathname;
+    return;
+  }
   await client.auth.signOut();
 });
 
@@ -107,15 +147,189 @@ client.auth.onAuthStateChange(async (event, session) => {
     currentUser = session.user;
     userEmailEl.textContent = currentUser.email;
     authScreen.style.display = 'none';
+    guestScreen.style.display = 'none';
     await loadInitialData();
   } else {
     currentUser = null;
-    authScreen.style.display = 'flex';
+    if (targetFolderId) {
+      // Guest mode for folder
+      authScreen.style.display = 'none';
+      initGuestFolderFlow(targetFolderId);
+    } else {
+      authScreen.style.display = 'flex';
+      guestScreen.style.display = 'none';
+    }
   }
 });
 
 // -----------------------------------------------------------------------------
-// Data Fetching
+// Guest Access & Request Workflow
+// -----------------------------------------------------------------------------
+let guestFolderInfo = null; // { id, name, owner_email }
+
+async function initGuestFolderFlow(folderId) {
+  guestScreen.style.display = 'flex';
+
+  try {
+    const { data, error } = await client.rpc('get_folder_public_info', { f_id: folderId });
+    if (error || !data || data.length === 0) {
+      guestFolderTitle.textContent = "Folder Not Found";
+      guestFolderSubtitle.textContent = "This folder may have been deleted or the link is invalid.";
+      guestCheckStep.style.display = 'none';
+      return;
+    }
+
+    guestFolderInfo = data[0];
+    guestFolderTitle.textContent = guestFolderInfo.name;
+    guestFolderSubtitle.textContent = `Shared by ${guestFolderInfo.owner_email}`;
+
+    // Auto-check if email already remembered locally
+    const savedEmail = localStorage.getItem('guest_email');
+    if (savedEmail) {
+      guestEmailInput.value = savedEmail;
+      checkGuestAccess(savedEmail);
+    }
+  } catch (err) {
+    console.error("Guest init error:", err);
+  }
+}
+
+guestCheckForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = guestEmailInput.value.trim().toLowerCase();
+  checkGuestAccess(email);
+});
+
+async function checkGuestAccess(email) {
+  guestCheckBtn.disabled = true;
+  guestCheckBtn.textContent = 'Verifying...';
+
+  try {
+    const { data, error } = await client.rpc('check_email_folder_access', {
+      f_id: targetFolderId,
+      check_email: email
+    });
+
+    if (error) throw error;
+
+    if (data && data.length > 0 && data[0].has_access) {
+      // Authorized!
+      const userAccess = data[0];
+      localStorage.setItem('guest_email', email);
+      guestFolderContext = {
+        folderId: targetFolderId,
+        email: email,
+        role: userAccess.role,
+        folderName: userAccess.folder_name
+      };
+      startGuestSession();
+    } else {
+      // Not authorized -> Show Request Access step
+      showRequestAccessStep(email);
+    }
+  } catch (err) {
+    alert(err.message || "Failed to verify access");
+  } finally {
+    guestCheckBtn.disabled = false;
+    guestCheckBtn.textContent = 'Access Folder';
+  }
+}
+
+function showRequestAccessStep(email) {
+  guestCheckStep.style.display = 'none';
+  guestRequestStep.style.display = 'block';
+  guestRequestedSuccess.style.display = 'none';
+  guestReqEmail.value = email;
+}
+
+guestBackBtn.addEventListener('click', () => {
+  guestRequestStep.style.display = 'none';
+  guestCheckStep.style.display = 'block';
+});
+
+guestRequestForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = guestReqEmail.value.trim().toLowerCase();
+  const requestedRole = guestReqRole.value;
+
+  guestRequestBtn.disabled = true;
+  guestRequestBtn.textContent = 'Submitting...';
+
+  try {
+    const { error } = await client
+      .from('folder_access_requests')
+      .upsert([{
+        folder_id: targetFolderId,
+        requester_email: email,
+        requested_role: requestedRole,
+        status: 'pending',
+        updated_at: new Date().toISOString()
+      }], { onConflict: 'folder_id,requester_email' });
+
+    if (error) throw error;
+
+    // Build mailto link to notify owner directly
+    const ownerEmail = guestFolderInfo ? guestFolderInfo.owner_email : '';
+    const folderName = guestFolderInfo ? guestFolderInfo.name : 'Bookmarks Folder';
+    const folderLink = window.location.href;
+    const subject = encodeURIComponent(`Access Request: ${folderName}`);
+    const body = encodeURIComponent(
+      `Hi,\n\nI have requested ${requestedRole.toUpperCase()} access to your folder "${folderName}".\n\nRequester Email: ${email}\nFolder Link: ${folderLink}\n\nPlease approve my request in your Bookmarks dashboard.\n\nThanks!`
+    );
+    guestMailtoLink.href = `mailto:${ownerEmail}?subject=${subject}&body=${body}`;
+
+    guestRequestStep.style.display = 'none';
+    guestRequestedSuccess.style.display = 'block';
+  } catch (err) {
+    alert(err.message || 'Error sending request');
+  } finally {
+    guestRequestBtn.disabled = false;
+    guestRequestBtn.textContent = 'Request Access';
+  }
+});
+
+guestCheckAgainBtn.addEventListener('click', () => {
+  const email = guestReqEmail.value.trim().toLowerCase();
+  checkGuestAccess(email);
+});
+
+// Start view for authorized guest
+async function startGuestSession() {
+  guestScreen.style.display = 'none';
+  userEmailEl.textContent = `${guestFolderContext.email} (${guestFolderContext.role})`;
+  logoutBtn.title = "Exit Shared Folder";
+
+  // Hide owner navigation sections in guest mode
+  document.querySelector('.nav-section').style.display = 'none';
+  document.querySelector('.nav-section:nth-of-type(2)').style.display = 'none';
+  if (guestFolderContext.role !== 'editor') {
+    document.getElementById('addBookmarkBtn').style.display = 'none';
+  }
+
+  viewTitle.textContent = guestFolderContext.folderName;
+  await loadGuestBookmarks();
+}
+
+async function loadGuestBookmarks() {
+  try {
+    const { data, error } = await client.rpc('get_shared_folder_bookmarks', {
+      f_id: guestFolderContext.folderId,
+      guest_email: guestFolderContext.email
+    });
+
+    if (error) throw error;
+    bookmarks = (data || []).map(b => ({
+      ...b,
+      folder_ids: [guestFolderContext.folderId]
+    }));
+    renderBookmarks();
+  } catch (err) {
+    console.error("Error loading guest bookmarks:", err);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Data Fetching (Authenticated Owner / Member)
 // -----------------------------------------------------------------------------
 async function loadInitialData() {
   await Promise.all([loadFolders(), loadBookmarks()]);
@@ -134,7 +348,7 @@ async function loadFolders() {
     }
     folders = folderData || [];
 
-    // Ensure user has a Global folder created if not already
+    // Ensure user has a Global folder
     let globalFolder = folders.find(f => f.owner_id === currentUser.id && f.name.toLowerCase() === 'global');
     if (!globalFolder) {
       const { data: newG, error: gErr } = await client
@@ -173,7 +387,7 @@ async function loadBookmarks() {
 }
 
 // -----------------------------------------------------------------------------
-// Render Folders & Checkboxes
+// Render Folders & Pills
 // -----------------------------------------------------------------------------
 function renderFolders() {
   folderListEl.innerHTML = '';
@@ -224,11 +438,9 @@ function populateFolderPills(selectedIds = []) {
     return;
   }
 
-  // Find user's Global folder ID
-  const globalFolder = folders.find(f => f.owner_id === currentUser.id && f.name.toLowerCase() === 'global');
+  const globalFolder = folders.find(f => f.owner_id === (currentUser ? currentUser.id : '') && f.name.toLowerCase() === 'global');
   const globalId = globalFolder ? globalFolder.id : null;
 
-  // Initialize active set
   activeModalFolderIds = new Set(selectedIds);
   if (globalId) activeModalFolderIds.add(globalId);
 
@@ -271,6 +483,17 @@ function populateFolderPills(selectedIds = []) {
 // -----------------------------------------------------------------------------
 function renderBookmarks() {
   const filtered = bookmarks.filter(b => {
+    // In guest mode, everything loaded is for the guest folder
+    if (guestFolderContext) {
+      if (currentFilter.searchQuery) {
+        const q = currentFilter.searchQuery.toLowerCase();
+        return (b.title && b.title.toLowerCase().includes(q)) ||
+               (b.url && b.url.toLowerCase().includes(q)) ||
+               (b.description && b.description.toLowerCase().includes(q));
+      }
+      return true;
+    }
+
     // 1. Folder Filter
     if (currentFilter.folderId === 'favorites') {
       if (!b.is_favorite) return false;
@@ -284,7 +507,7 @@ function renderBookmarks() {
       if (!b.folder_ids || !b.folder_ids.includes(currentFilter.folderId)) return false;
     }
 
-    // 2. Search Filter (title, url, description, folder names)
+    // 2. Search Filter
     if (currentFilter.searchQuery) {
       const q = currentFilter.searchQuery.toLowerCase();
       const matchTitle = b.title && b.title.toLowerCase().includes(q);
@@ -328,10 +551,11 @@ function renderBookmarks() {
     }
     const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
 
-    // Folder Badges
     const assignedFolders = (b.folder_ids || [])
       .map(id => folders.find(f => f.id === id))
       .filter(Boolean);
+
+    const isOwner = currentUser && (b.owner_id === currentUser.id);
 
     card.innerHTML = `
       <div class="bookmark-card-top">
@@ -344,9 +568,11 @@ function renderBookmarks() {
           </a>
           <div class="bookmark-url">${escapeHtml(domain)}</div>
         </div>
-        <button class="icon-btn-mini fav-btn" title="Favorite">
-          <svg width="15" height="15" fill="${b.is_favorite ? '#f59e0b' : 'none'}" stroke="${b.is_favorite ? '#f59e0b' : 'currentColor'}" stroke-width="2" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        </button>
+        ${!guestFolderContext ? `
+          <button class="icon-btn-mini fav-btn" title="Favorite">
+            <svg width="15" height="15" fill="${b.is_favorite ? '#f59e0b' : 'none'}" stroke="${b.is_favorite ? '#f59e0b' : 'currentColor'}" stroke-width="2" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </button>
+        ` : ''}
       </div>
 
       ${b.description ? `<p class="bookmark-desc">${escapeHtml(b.description)}</p>` : ''}
@@ -364,10 +590,10 @@ function renderBookmarks() {
           <button class="icon-btn-mini copy-btn" title="Copy Link">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
           </button>
-          <button class="icon-btn-mini edit-btn" title="Edit">
-            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </button>
-          ${b.owner_id === currentUser.id ? `
+          ${isOwner ? `
+            <button class="icon-btn-mini edit-btn" title="Edit">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
             <button class="icon-btn-mini del-btn" title="Delete">
               <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </button>
@@ -376,30 +602,39 @@ function renderBookmarks() {
       </div>
     `;
 
-    // Action events (stop propagation so clicking action buttons doesn't trigger card navigation)
-    card.querySelector('.fav-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleFavorite(b);
-    });
+    // Action button listeners
+    const favBtn = card.querySelector('.fav-btn');
+    if (favBtn) {
+      favBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFavorite(b);
+      });
+    }
+
     card.querySelector('.copy-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       navigator.clipboard.writeText(b.url);
       showToast('Link copied');
     });
-    card.querySelector('.edit-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      openBookmarkModal(b);
-    });
-    if (b.owner_id === currentUser.id) {
-      card.querySelector('.del-btn').addEventListener('click', (e) => {
+
+    const editBtn = card.querySelector('.edit-btn');
+    if (editBtn) {
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openBookmarkModal(b);
+      });
+    }
+
+    const delBtn = card.querySelector('.del-btn');
+    if (delBtn) {
+      delBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         deleteBookmark(b.id);
       });
     }
 
-    // Clicking anywhere on the card opens the link directly
+    // Clicking anywhere on card opens link directly
     card.addEventListener('click', (e) => {
-      // If clicking directly on an anchor or inside buttons, let native/button handler handle it
       if (e.target.closest('button, a')) return;
       window.open(b.url, '_blank', 'noopener,noreferrer');
     });
@@ -433,7 +668,6 @@ searchInput.addEventListener('input', (e) => {
   renderBookmarks();
 });
 
-// Shortcut: '/' focuses search
 window.addEventListener('keydown', (e) => {
   if (e.key === '/' && document.activeElement !== searchInput && !isModalOpen()) {
     e.preventDefault();
@@ -446,7 +680,7 @@ function isModalOpen() {
 }
 
 // -----------------------------------------------------------------------------
-// Bookmark Operations (Create / Update / Delete)
+// Bookmark Operations
 // -----------------------------------------------------------------------------
 let editingBookmarkId = null;
 
@@ -487,7 +721,6 @@ bookmarkForm.addEventListener('submit', async (e) => {
   const title = document.getElementById('bmTitle').value.trim();
   const description = document.getElementById('bmDesc').value.trim();
 
-  // Get selected folder IDs from active set
   const selectedFolderIds = Array.from(activeModalFolderIds);
 
   try {
@@ -500,14 +733,13 @@ bookmarkForm.addEventListener('submit', async (e) => {
         .eq('id', editingBookmarkId);
       if (error) throw error;
 
-      // Delete existing folder relations
       await client.from('bookmark_folders').delete().eq('bookmark_id', editingBookmarkId);
       showToast('Link updated');
     } else {
       const { data, error } = await client
         .from('bookmarks')
         .insert([{
-          owner_id: currentUser.id,
+          owner_id: currentUser ? currentUser.id : null,
           url,
           title,
           description
@@ -519,7 +751,6 @@ bookmarkForm.addEventListener('submit', async (e) => {
       showToast('Link added');
     }
 
-    // Insert new folder relations
     if (selectedFolderIds.length > 0) {
       const folderInserts = selectedFolderIds.map(fId => ({
         bookmark_id: bookmarkId,
@@ -530,7 +761,11 @@ bookmarkForm.addEventListener('submit', async (e) => {
     }
 
     bookmarkModal.classList.remove('open');
-    await loadBookmarks();
+    if (guestFolderContext) {
+      await loadGuestBookmarks();
+    } else {
+      await loadBookmarks();
+    }
   } catch (err) {
     alert(err.message || 'Error saving link');
   }
@@ -578,7 +813,6 @@ folderForm.addEventListener('submit', async (e) => {
 
   if (!name) return;
 
-  // Frontend check: Check if folder with same name already exists for current user
   const alreadyExists = folders.some(
     f => f.owner_id === currentUser.id && f.name.trim().toLowerCase() === name.toLowerCase()
   );
@@ -624,7 +858,7 @@ async function deleteFolder(folderId, name) {
 }
 
 // -----------------------------------------------------------------------------
-// Folder Sharing
+// Folder Sharing & Access Requests Manager
 // -----------------------------------------------------------------------------
 let activeSharingFolder = null;
 
@@ -634,8 +868,91 @@ async function openShareModal(folder) {
   document.getElementById('shareEmail').value = '';
   document.getElementById('shareRole').value = 'viewer';
   
-  await refreshMemberList();
+  // Set shareable link
+  const cleanUrl = window.location.origin + window.location.pathname + `?folder=${folder.id}`;
+  shareLinkUrl.textContent = cleanUrl;
+  copyShareLinkBtn.onclick = () => {
+    navigator.clipboard.writeText(cleanUrl);
+    showToast('Folder link copied to clipboard');
+  };
+
+  await Promise.all([refreshMemberList(), refreshPendingRequests()]);
   shareModal.classList.add('open');
+}
+
+async function refreshPendingRequests() {
+  pendingRequestsList.innerHTML = '<p style="font-size:0.75rem; color:var(--text-dim)">Loading requests...</p>';
+
+  try {
+    const { data, error } = await client
+      .from('folder_access_requests')
+      .select('*')
+      .eq('folder_id', activeSharingFolder.id)
+      .eq('status', 'pending');
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      pendingRequestsSection.style.display = 'none';
+      return;
+    }
+
+    pendingRequestsSection.style.display = 'block';
+    pendingRequestsBadge.textContent = data.length;
+    pendingRequestsList.innerHTML = '';
+
+    data.forEach(req => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding: 0.4rem 0; border-bottom: 1px solid #fde68a; font-size: 0.8rem;';
+      
+      row.innerHTML = `
+        <div style="min-width: 0; flex: 1;">
+          <div style="font-weight: 550; color: #78350f;">${escapeHtml(req.requester_email)}</div>
+          <div style="font-size: 0.72rem; color: #92400e;">Requested: <strong>${req.requested_role}</strong></div>
+        </div>
+        <div style="display:flex; align-items:center; gap: 0.35rem; flex-shrink: 0;">
+          <select class="form-control grant-role-select" style="font-size: 0.75rem; padding: 2px 4px; height: 26px; width: 75px;">
+            <option value="viewer" ${req.requested_role === 'viewer' ? 'selected' : ''}>Viewer</option>
+            <option value="editor" ${req.requested_role === 'editor' ? 'selected' : ''}>Editor</option>
+          </select>
+          <button class="btn btn-primary approve-req-btn" style="font-size: 0.72rem; padding: 3px 7px;">Approve</button>
+          <button class="icon-btn-mini reject-req-btn" title="Reject">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+      `;
+
+      // Approve handler
+      row.querySelector('.approve-req-btn').addEventListener('click', async () => {
+        const grantedRole = row.querySelector('.grant-role-select').value;
+        const { error: appErr } = await client.rpc('approve_folder_request', {
+          request_id: req.id,
+          granted_role: grantedRole
+        });
+
+        if (appErr) {
+          alert(appErr.message);
+        } else {
+          showToast(`Approved ${req.requester_email} as ${grantedRole}`);
+          await Promise.all([refreshMemberList(), refreshPendingRequests()]);
+        }
+      });
+
+      // Reject handler
+      row.querySelector('.reject-req-btn').addEventListener('click', async () => {
+        const { error: rejErr } = await client.from('folder_access_requests').delete().eq('id', req.id);
+        if (rejErr) alert(rejErr.message);
+        else {
+          showToast('Request dismissed');
+          await refreshPendingRequests();
+        }
+      });
+
+      pendingRequestsList.appendChild(row);
+    });
+  } catch (err) {
+    console.error("Error loading pending requests:", err);
+  }
 }
 
 async function refreshMemberList() {
@@ -690,7 +1007,7 @@ shareForm.addEventListener('submit', async (e) => {
   const email = document.getElementById('shareEmail').value.trim().toLowerCase();
   const role = document.getElementById('shareRole').value;
 
-  if (email === currentUser.email.toLowerCase()) {
+  if (currentUser && email === currentUser.email.toLowerCase()) {
     alert("You cannot share a folder with yourself.");
     return;
   }

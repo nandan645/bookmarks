@@ -10,6 +10,67 @@
 </head>
 <body>
 
+  <!-- Guest Folder Access View -->
+  <div id="guestScreen" class="auth-screen" style="display: none;">
+    <div class="auth-card" style="max-width: 440px;">
+      <h2 id="guestFolderTitle">Shared Folder</h2>
+      <p id="guestFolderSubtitle">Access links or request permission</p>
+
+      <!-- Step A: Enter Email to Check Access -->
+      <div id="guestCheckStep">
+        <form id="guestCheckForm">
+          <div class="form-group" style="text-align: left;">
+            <label for="guestEmailInput">Your Email Address</label>
+            <input type="email" id="guestEmailInput" class="form-control" placeholder="you@company.com" required autocomplete="email">
+          </div>
+          <button type="submit" id="guestCheckBtn" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 0.5rem;">Access Folder</button>
+        </form>
+        <div style="margin-top: 1rem; border-top: 1px solid var(--border-subtle); padding-top: 0.8rem;">
+          <a href="./" style="font-size: 0.8rem; color: var(--text-dim); text-decoration: none;">Go to Account Login</a>
+        </div>
+      </div>
+
+      <!-- Step B: Request Access Screen (if unauthorized) -->
+      <div id="guestRequestStep" style="display: none; text-align: left;">
+        <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.82rem; color: #92400e;">
+          You don't have access to this folder yet. Request access from the owner below.
+        </div>
+        <form id="guestRequestForm">
+          <div class="form-group">
+            <label>Requesting As</label>
+            <input type="email" id="guestReqEmail" class="form-control" readonly style="background: #f4f5f7;">
+          </div>
+          <div class="form-group">
+            <label for="guestReqRole">Permission Level</label>
+            <select id="guestReqRole" class="form-control">
+              <option value="viewer" selected>Viewer (Read-only)</option>
+              <option value="editor">Editor (Can add/edit links)</option>
+            </select>
+          </div>
+          <button type="submit" id="guestRequestBtn" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 0.5rem;">Request Access</button>
+        </form>
+        <div style="margin-top: 0.8rem; text-align: center;">
+          <button id="guestBackBtn" type="button" class="btn btn-secondary" style="font-size: 0.8rem;">Try Another Email</button>
+        </div>
+      </div>
+
+      <!-- Step C: Requested Success Message -->
+      <div id="guestRequestedSuccess" style="display: none; text-align: center;">
+        <div style="width: 38px; height: 38px; border-radius: 50%; background: #dcfce7; color: #15803d; display: grid; place-items: center; margin: 0 auto 0.75rem; font-size: 1.1rem;">✓</div>
+        <h3 style="font-size: 1.05rem; font-weight: 600; margin-bottom: 0.3rem;">Request Sent</h3>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;">
+          The folder owner has been notified. An email draft has also been prepared to send directly to the owner.
+        </p>
+        <a id="guestMailtoLink" href="#" class="btn btn-primary" style="width: 100%; justify-content: center; margin-bottom: 0.5rem; text-decoration: none;">
+          Notify Owner via Email
+        </a>
+        <button id="guestCheckAgainBtn" class="btn btn-secondary" style="width: 100%; justify-content: center; font-size: 0.8rem;">
+          Check Approval Status
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Authentication Overlay -->
   <div id="authScreen" class="auth-screen">
     <div class="auth-card">
@@ -190,6 +251,26 @@
         <button class="icon-btn-mini modal-close">
           <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
+      </div>
+
+      <!-- Share Link Copy Bar -->
+      <div style="margin-bottom: 1.25rem; padding: 0.65rem; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+        <div style="min-width: 0; flex: 1;">
+          <div style="font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; font-weight: 600;">Shareable Link</div>
+          <div id="shareLinkUrl" style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+        </div>
+        <button id="copyShareLinkBtn" type="button" class="btn btn-secondary" style="font-size: 0.76rem; padding: 0.35rem 0.65rem; flex-shrink: 0;">Copy Link</button>
+      </div>
+
+      <!-- Pending Access Requests Section -->
+      <div id="pendingRequestsSection" style="margin-bottom: 1.25rem; display: none;">
+        <label style="font-size: 0.78rem; color: #b45309; font-weight: 600; display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;">
+          <span>Pending Access Requests</span>
+          <span id="pendingRequestsBadge" class="badge" style="background: #fef3c7; color: #b45309;">0</span>
+        </label>
+        <div id="pendingRequestsList" style="max-height: 140px; overflow-y: auto; border: 1px solid #fde68a; border-radius: var(--radius-sm); background: #fffbeb; padding: 0.4rem 0.6rem;">
+          <!-- Pending request items injected here -->
+        </div>
       </div>
 
       <form id="shareForm" style="margin-bottom: 1.25rem;">
