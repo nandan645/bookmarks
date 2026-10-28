@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bookmarks</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Local Supabase JS Client -->
+  <script src="js/supabase.js"></script>
+</head>
+<body>
+
+  <!-- Guest Folder Access View -->
+  <div id="guestScreen" class="auth-screen" style="display: none;">
+    <div class="auth-card" style="max-width: 440px;">
+      <h2 id="guestFolderTitle">Shared Folder</h2>
+      <p id="guestFolderSubtitle">Access links or request permission</p>
+
+      <!-- Step A: Enter Email to Check Access -->
+      <div id="guestCheckStep">
+        <form id="guestCheckForm">
+          <div class="form-group" style="text-align: left;">
+            <label for="guestEmailInput">Your Email Address</label>
+            <input type="email" id="guestEmailInput" class="form-control" placeholder="you@company.com" required autocomplete="email">
+          </div>
+          <button type="submit" id="guestCheckBtn" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 0.5rem;">Access Folder</button>
+        </form>
+        <div style="margin-top: 1rem; border-top: 1px solid var(--border-subtle); padding-top: 0.8rem;">
+          <a href="./" style="font-size: 0.8rem; color: var(--text-dim); text-decoration: none;">Go to Account Login</a>
+        </div>
+      </div>
+
+      <!-- Step B: Request Access Screen (if unauthorized) -->
+      <div id="guestRequestStep" style="display: none; text-align: left;">
+        <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.82rem; color: #92400e;">
+          You don't have access to this folder yet. Request access from the owner below.
+        </div>
+        <form id="guestRequestForm">
+          <div class="form-group">
+            <label>Requesting As</label>
+            <input type="email" id="guestReqEmail" class="form-control" readonly style="background: #f4f5f7;">
+          </div>
+          <div class="form-group">
+            <label for="guestReqRole">Permission Level</label>
+            <select id="guestReqRole" class="form-control">
+              <option value="viewer" selected>Viewer (Read-only)</option>
+              <option value="editor">Editor (Can add/edit links)</option>
+            </select>
+          </div>
+          <button type="submit" id="guestRequestBtn" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 0.5rem;">Request Access</button>
+        </form>
+        <div style="margin-top: 0.8rem; text-align: center;">
+          <button id="guestBackBtn" type="button" class="btn btn-secondary" style="font-size: 0.8rem;">Try Another Email</button>
+        </div>
+      </div>
+
+      <!-- Step C: Requested Success Message -->
+      <div id="guestRequestedSuccess" style="display: none; text-align: center;">
+        <div style="width: 38px; height: 38px; border-radius: 50%; background: #dcfce7; color: #15803d; display: grid; place-items: center; margin: 0 auto 0.75rem; font-size: 1.1rem;">✓</div>
+        <h3 style="font-size: 1.05rem; font-weight: 600; margin-bottom: 0.3rem;">Request Sent</h3>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;">
+          The folder owner has been notified. An email draft has also been prepared to send directly to the owner.
+        </p>
+        <a id="guestMailtoLink" href="#" class="btn btn-primary" style="width: 100%; justify-content: center; margin-bottom: 0.5rem; text-decoration: none;">
+          Notify Owner via Email
+        </a>
+        <button id="guestCheckAgainBtn" class="btn btn-secondary" style="width: 100%; justify-content: center; font-size: 0.8rem;">
+          Check Approval Status
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Authentication Overlay -->
+  <div id="authScreen" class="auth-screen">
+    <div class="auth-card">
+      <h2 id="authModeTitle">Sign In</h2>
+      <p>Save and organize your links in virtual folders.</p>
+
+      <form id="authForm">
+        <div class="form-group" style="text-align: left;">
+          <label for="authEmail">Email</label>
+          <input type="email" id="authEmail" class="form-control" placeholder="you@example.com" required autocomplete="email">
+        </div>
+        <div class="form-group" style="text-align: left;">
+          <label for="authPassword">Password</label>
+          <input type="password" id="authPassword" class="form-control" placeholder="••••••••" required autocomplete="current-password">
+        </div>
+        <button type="submit" id="authSubmitBtn" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 0.5rem;">Sign In</button>
+      </form>
+
+      <div style="margin-top: 1rem;">
+        <button id="authToggleBtn" class="btn btn-secondary" style="width: 100%; justify-content: center; font-size: 0.8rem;">Need an account? Sign Up</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main App Shell -->
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo-area">
+        <h1>Bookmarks</h1>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-label">General</div>
+        <button id="navAll" class="nav-btn active">
+          <div class="left-content">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+            <span>All Links</span>
+          </div>
+        </button>
+        <button id="navFavorites" class="nav-btn">
+          <div class="left-content">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <span>Favorites</span>
+          </div>
+        </button>
+        <button id="navShared" class="nav-btn">
+          <div class="left-content">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Shared with Me</span>
+          </div>
+        </button>
+      </div>
+
+      <div class="nav-section" style="flex: 1; display: flex; flex-direction: column;">
+        <div class="nav-label">
+          <span>Folders</span>
+          <button id="createFolderBtn" class="icon-btn-mini" title="New Folder">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </button>
+        </div>
+        <div id="folderList" class="folder-list">
+          <!-- Folders injected via JS -->
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="user-profile">
+          <span id="userEmail" class="user-email">user@domain.com</span>
+          <button id="logoutBtn" class="icon-btn-mini" title="Sign Out">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="top-header">
+        <div class="search-box-wrapper">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" id="searchInput" class="search-input" placeholder="Search title, URL, or folders... (/ to focus)">
+          <span class="kbd-shortcut">/</span>
+        </div>
+
+        <div class="top-actions" style="position: relative;">
+          <!-- Notification Bell Button -->
+          <button id="notifBellBtn" class="icon-btn-mini" title="Access Requests" style="position: relative; width: 34px; height: 34px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: #ffffff;">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+            <span id="notifBadge" style="display: none; position: absolute; top: -4px; right: -4px; background: #ef4444; color: #ffffff; font-size: 0.65rem; font-weight: 700; width: 16px; height: 16px; border-radius: 50%; display: none; place-items: center; justify-content: center; border: 2px solid #ffffff;">0</span>
+          </button>
+
+          <!-- Notification Dropdown Popover -->
+          <div id="notifDropdown" style="display: none; position: absolute; top: 42px; right: 0; width: 340px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); box-shadow: 0 12px 28px rgba(0,0,0,0.1); z-index: 1000; padding: 0.85rem;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.65rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.45rem;">
+              <span style="font-size: 0.82rem; font-weight: 600;">Access Requests</span>
+              <span id="notifDropdownCount" style="font-size: 0.72rem; color: var(--text-dim);">0 pending</span>
+            </div>
+            <div id="notifRequestsList" style="max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;">
+              <!-- Request items rendered here -->
+            </div>
+          </div>
+
+          <button id="addBookmarkBtn" class="btn btn-primary">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <span>Add Link</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="content-body">
+        <div class="view-header">
+          <h2 id="viewTitle">All Links</h2>
+          <div id="viewCount" class="view-meta">0 links</div>
+        </div>
+
+        <!-- Bookmarks Grid -->
+        <div id="bookmarkGrid" class="bookmark-grid">
+          <!-- Bookmarks rendered here -->
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal: Add/Edit Bookmark -->
+  <div id="bookmarkModal" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="bookmarkModalTitle">Add Link</h3>
+        <button class="icon-btn-mini modal-close">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <form id="bookmarkForm">
+        <div class="form-group">
+          <label for="bmUrl">URL *</label>
+          <input type="url" id="bmUrl" class="form-control" placeholder="https://example.com" required>
+        </div>
+        <div class="form-group">
+          <label for="bmTitle">Title *</label>
+          <input type="text" id="bmTitle" class="form-control" placeholder="Page Title" required>
+        </div>
+        <div class="form-group">
+          <label for="bmDesc">Description (Optional)</label>
+          <textarea id="bmDesc" class="form-control" rows="2" placeholder="Optional notes..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Assign to Folders</label>
+          <div id="folderPillContainer" class="folder-pill-container">
+            <!-- Dynamically populated horizontal chips -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Link</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Create Folder -->
+  <div id="folderModal" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Create Folder</h3>
+        <button class="icon-btn-mini modal-close">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <form id="folderForm">
+        <div class="form-group">
+          <label for="folderName">Folder Name *</label>
+          <input type="text" id="folderName" class="form-control" placeholder="e.g. Work, Tools, Dev" required>
+        </div>
+        <div class="form-group">
+          <label for="folderColor">Color</label>
+          <input type="color" id="folderColor" class="form-control" value="#18181b" style="height: 38px; padding: 2px; cursor: pointer;">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Folder</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Share Folder -->
+  <div id="shareModal" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <h3>Share Folder</h3>
+          <p id="shareFolderName" style="font-size: 0.82rem; color: var(--text-dim);"></p>
+        </div>
+        <button class="icon-btn-mini modal-close">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <!-- Share Link Copy Bar -->
+      <div style="margin-bottom: 1.25rem; padding: 0.65rem; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+        <div style="min-width: 0; flex: 1;">
+          <div style="font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; font-weight: 600;">Shareable Link</div>
+          <div id="shareLinkUrl" style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+        </div>
+        <button id="copyShareLinkBtn" type="button" class="btn btn-secondary" style="font-size: 0.76rem; padding: 0.35rem 0.65rem; flex-shrink: 0;">Copy Link</button>
+      </div>
+
+      <!-- Pending Access Requests Section -->
+      <div id="pendingRequestsSection" style="margin-bottom: 1.25rem; display: none;">
+        <label style="font-size: 0.78rem; color: #b45309; font-weight: 600; display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;">
+          <span>Pending Access Requests</span>
+          <span id="pendingRequestsBadge" class="badge" style="background: #fef3c7; color: #b45309;">0</span>
+        </label>
+        <div id="pendingRequestsList" style="max-height: 140px; overflow-y: auto; border: 1px solid #fde68a; border-radius: var(--radius-sm); background: #fffbeb; padding: 0.4rem 0.6rem;">
+          <!-- Pending request items injected here -->
+        </div>
+      </div>
+
+      <form id="shareForm" style="margin-bottom: 1.25rem;">
+        <div style="display: flex; gap: 0.4rem;">
+          <input type="email" id="shareEmail" class="form-control" placeholder="colleague@company.com" required style="flex: 1;">
+          <select id="shareRole" class="form-control" style="width: 95px;">
+            <option value="viewer">Viewer</option>
+            <option value="editor">Editor</option>
+          </select>
+          <button type="submit" class="btn btn-primary">Share</button>
+        </div>
+      </form>
+
+      <div>
+        <label style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.4rem;">People with access</label>
+        <div id="sharedMembersList" style="max-height: 150px; overflow-y: auto;">
+          <!-- Member rows injected here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom UI Alert Modal -->
+  <div id="customAlertModal" class="modal-backdrop">
+    <div class="custom-alert-box">
+      <div id="customAlertMsg" class="custom-alert-message">Notice</div>
+      <button id="customAlertBtn" class="btn btn-primary" style="width: 100%; justify-content: center;">OK</button>
+    </div>
+  </div>
+
+  <!-- Toast Notification Stack -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="js/supabaseClient.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
