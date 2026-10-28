@@ -127,7 +127,10 @@ async function loadFolders() {
       .select('*, folder_members(shared_with_email, role)')
       .order('created_at', { ascending: true });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error loading folders:', error);
+      throw error;
+    }
     folders = folderData || [];
 
     // Ensure user has a Global folder created if not already
@@ -136,10 +139,10 @@ async function loadFolders() {
       const { data: newG, error: gErr } = await client
         .from('folders')
         .insert([{ name: 'Global', color: '#18181b', owner_id: currentUser.id }])
-        .select('*, folder_members(shared_with_email, role)')
-        .single();
-      if (!gErr && newG) {
-        folders.unshift(newG);
+        .select('*, folder_members(shared_with_email, role)');
+      
+      if (!gErr && newG && newG.length > 0) {
+        folders.unshift(newG[0]);
       }
     }
 
