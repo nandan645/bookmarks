@@ -673,6 +673,25 @@ body {
   font-size: 0.82rem;
 }
 
+/* Custom UI Alert Modal Dialog */
+.custom-alert-box {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.custom-alert-message {
+  font-size: 0.88rem;
+  color: var(--text-main);
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+}
+
 /* Auth Overlay Screen */
 .auth-screen {
   position: fixed;

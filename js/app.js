@@ -73,6 +73,30 @@ const notifDropdownCount = document.getElementById('notifDropdownCount');
 const notifRequestsList = document.getElementById('notifRequestsList');
 let allPendingRequests = [];
 
+// Custom in-app UI alert dialog (replaces browser's alert)
+const customAlertModal = document.getElementById('customAlertModal');
+const customAlertMsg = document.getElementById('customAlertMsg');
+const customAlertBtn = document.getElementById('customAlertBtn');
+
+function showCustomAlert(message) {
+  return new Promise(resolve => {
+    customAlertMsg.textContent = message;
+    customAlertModal.classList.add('open');
+
+    function onDismiss() {
+      customAlertModal.classList.remove('open');
+      customAlertBtn.removeEventListener('click', onDismiss);
+      resolve();
+    }
+    customAlertBtn.addEventListener('click', onDismiss);
+  });
+}
+
+// Override native alert with custom in-app modal
+window.alert = function(msg) {
+  showCustomAlert(msg);
+};
+
 // Helper: Toast
 function showToast(message) {
   const container = document.getElementById('toastContainer');
