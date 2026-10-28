@@ -25,7 +25,8 @@ const searchInput = document.getElementById('searchInput');
 const folderListEl = document.getElementById('folderList');
 const viewTitle = document.getElementById('viewTitle');
 const viewCount = document.getElementById('viewCount');
-const folderCheckboxesEl = document.getElementById('folderCheckboxes');
+const folderPillContainerEl = document.getElementById('folderPillContainer');
+let activeModalFolderIds = new Set();
 
 // Navigation Buttons
 const navAll = document.getElementById('navAll');
@@ -147,7 +148,7 @@ async function loadFolders() {
     }
 
     renderFolders();
-    populateFolderCheckboxes();
+    populateFolderPills();
   } catch (err) {
     console.error('Error loading folders:', err);
   }
@@ -216,10 +217,10 @@ function renderFolders() {
   });
 }
 
-function populateFolderCheckboxes(selectedIds = []) {
-  folderCheckboxesEl.innerHTML = '';
+function populateFolderPills(selectedIds = []) {
+  folderPillContainerEl.innerHTML = '';
   if (folders.length === 0) {
-    folderCheckboxesEl.innerHTML = '<span style="color:var(--text-dim); font-size: 0.78rem;">No folders created yet</span>';
+    folderPillContainerEl.innerHTML = '<span style="color:var(--text-dim); font-size: 0.78rem;">No folders created yet</span>';
     return;
   }
 
@@ -227,20 +228,41 @@ function populateFolderCheckboxes(selectedIds = []) {
   const globalFolder = folders.find(f => f.owner_id === currentUser.id && f.name.toLowerCase() === 'global');
   const globalId = globalFolder ? globalFolder.id : null;
 
-  folders.forEach(f => {
-    const label = document.createElement('label');
-    label.className = 'folder-check-item';
-    const isGlobal = (f.id === globalId);
-    // If global, always checked
-    const checked = (isGlobal || selectedIds.includes(f.id)) ? 'checked' : '';
-    const disabled = isGlobal ? 'disabled' : '';
+  // Initialize active set
+  activeModalFolderIds = new Set(selectedIds);
+  if (globalId) activeModalFolderIds.add(globalId);
 
-    label.innerHTML = `
-      <input type="checkbox" value="${f.id}" ${checked} ${disabled}>
+  folders.forEach(f => {
+    const isGlobal = (f.id === globalId);
+    const isSelected = activeModalFolderIds.has(f.id);
+
+    const chip = document.createElement('div');
+    chip.className = `folder-chip ${isSelected ? 'selected' : ''} ${isGlobal ? 'locked' : ''}`;
+    chip.dataset.folderId = f.id;
+
+    chip.innerHTML = `
       <span class="folder-color-dot" style="background-color: ${f.color || '#18181b'}"></span>
-      <span>${escapeHtml(f.name)} ${isGlobal ? '<em style="color:var(--text-dim); font-size:0.75rem;">(Default)</em>' : ''}</span>
+      <span>${escapeHtml(f.name)}</span>
+      ${isGlobal 
+        ? '' 
+        : (isSelected 
+            ? '<span class="chip-cross" title="Remove">×</span>' 
+            : '<span class="chip-cross" style="font-size:0.8rem; opacity:0.6;" title="Add">+</span>')
+      }
     `;
-    folderCheckboxesEl.appendChild(label);
+
+    if (!isGlobal) {
+      chip.addEventListener('click', () => {
+        if (activeModalFolderIds.has(f.id)) {
+          activeModalFolderIds.delete(f.id);
+        } else {
+          activeModalFolderIds.add(f.id);
+        }
+        populateFolderPills(Array.from(activeModalFolderIds));
+      });
+    }
+
+    folderPillContainerEl.appendChild(chip);
   });
 }
 
@@ -422,10 +444,9 @@ function openBookmarkModal(b = null) {
   if (b) {
     selectedFolderIds = b.folder_ids || [];
   } else if (currentFilter.folderId.length > 10) {
-    // If currently filtered on a folder, check that folder by default
     selectedFolderIds = [currentFilter.folderId];
   }
-  populateFolderCheckboxes(selectedFolderIds);
+  populateFolderPills(selectedFolderIds);
 
   bookmarkModal.classList.add('open');
   if (!b) document.getElementById('bmUrl').focus();
@@ -448,15 +469,8 @@ bookmarkForm.addEventListener('submit', async (e) => {
   const title = document.getElementById('bmTitle').value.trim();
   const description = document.getElementById('bmDesc').value.trim();
 
-  // Get selected folder checkboxes (including disabled ones like Global)
-  const checkedBoxes = folderCheckboxesEl.querySelectorAll('input[type="checkbox"]:checked');
-  const selectedFolderIds = Array.from(checkedBoxes).map(cb => cb.value);
-
-  // Always ensure Global folder ID is included
-  const globalFolder = folders.find(f => f.owner_id === currentUser.id && f.name.toLowerCase() === 'global');
-  if (globalFolder && !selectedFolderIds.includes(globalFolder.id)) {
-    selectedFolderIds.push(globalFolder.id);
-  }
+  // Get selected folder IDs from active set
+  const selectedFolderIds = Array.from(activeModalFolderIds);
 
   try {
     let bookmarkId = editingBookmarkId;
