@@ -16,18 +16,15 @@ const guestScreen = document.getElementById('guestScreen');
 // Auth Form Elements
 const authForm = document.getElementById('authForm');
 const authEmailInput = document.getElementById('authEmail');
-const authPasswordInput = document.getElementById('authPassword');
 const authModeTitle = document.getElementById('authModeTitle');
 const authSubmitBtn = document.getElementById('authSubmitBtn');
-const authToggleBtn = document.getElementById('authToggleBtn');
-const authToggleContainer = document.getElementById('authToggleContainer');
 const otpVerifyForm = document.getElementById('otpVerifyForm');
 const otpSentEmail = document.getElementById('otpSentEmail');
 const otpTokenInput = document.getElementById('otpTokenInput');
 const otpVerifyBtn = document.getElementById('otpVerifyBtn');
+const otpResendBtn = document.getElementById('otpResendBtn');
 const otpCancelBtn = document.getElementById('otpCancelBtn');
-let isSignUp = false;
-let pendingSignUpEmail = '';
+let pendingAuthEmail = '';
 
 // Guest Access Elements
 const guestFolderTitle = document.getElementById('guestFolderTitle');
@@ -124,59 +121,59 @@ const urlParams = new URLSearchParams(window.location.search);
 const targetFolderId = urlParams.get('folder');
 
 // -----------------------------------------------------------------------------
-// Authentication
+// Authentication (Passwordless OTP / Magic Code)
 // -----------------------------------------------------------------------------
-authToggleBtn.addEventListener('click', () => {
-  isSignUp = !isSignUp;
-  if (isSignUp) {
-    authModeTitle.textContent = "Create Account";
-    authSubmitBtn.textContent = "Sign Up";
-    authToggleBtn.textContent = "Already have an account? Sign In";
-  } else {
-    authModeTitle.textContent = "Sign In";
-    authSubmitBtn.textContent = "Sign In";
-    authToggleBtn.textContent = "Need an account? Sign Up";
-  }
-});
+async function sendOtp(email) {
+  return await client.auth.signInWithOtp({
+    email,
+    options: {
+      shouldCreateUser: true
+    }
+  });
+}
 
 authForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const email = authEmailInput.value.trim();
-  const password = authPasswordInput.value;
+  if (!email) return;
 
   authSubmitBtn.disabled = true;
-  authSubmitBtn.textContent = 'Processing...';
+  authSubmitBtn.textContent = 'Sending Code...';
 
   try {
-    if (isSignUp) {
-      const { data, error } = await client.auth.signUp({
-        email,
-        password
-      });
-      if (error) throw error;
+    const { error } = await sendOtp(email);
+    if (error) throw error;
 
-      // Check if user requires OTP / email confirmation
-      if (data && data.user && (!data.session || (data.user.identities && data.user.identities.length === 0))) {
-        pendingSignUpEmail = email;
-        otpSentEmail.textContent = email;
-        authForm.style.display = 'none';
-        authToggleContainer.style.display = 'none';
-        otpVerifyForm.style.display = 'block';
-        otpTokenInput.value = '';
-        otpTokenInput.focus();
-        showToast('Confirmation code sent to your email!');
-      } else if (data && data.session) {
-        showToast('Welcome! Logging in...');
-      }
-    } else {
-      const { data, error } = await client.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-    }
+    pendingAuthEmail = email;
+    otpSentEmail.textContent = email;
+    authForm.style.display = 'none';
+    otpVerifyForm.style.display = 'block';
+    otpTokenInput.value = '';
+    otpTokenInput.focus();
+    showToast('Verification code sent to your email!');
   } catch (err) {
-    alert(err.message || 'Authentication error');
+    alert(err.message || 'Failed to send verification code');
   } finally {
     authSubmitBtn.disabled = false;
-    authSubmitBtn.textContent = isSignUp ? 'Sign Up' : 'Sign In';
+    authSubmitBtn.textContent = 'Send Login Code';
+  }
+});
+
+// Resend OTP
+otpResendBtn.addEventListener('click', async () => {
+  if (!pendingAuthEmail) return;
+  otpResendBtn.disabled = true;
+  otpResendBtn.textContent = 'Resending...';
+
+  try {
+    const { error } = await sendOtp(pendingAuthEmail);
+    if (error) throw error;
+    showToast('A fresh verification code has been sent!');
+  } catch (err) {
+    alert(err.message || 'Failed to resend code');
+  } finally {
+    otpResendBtn.disabled = false;
+    otpResendBtn.textContent = 'Resend Code';
   }
 });
 
@@ -190,16 +187,30 @@ otpVerifyForm.addEventListener('submit', async (e) => {
   otpVerifyBtn.textContent = 'Verifying...';
 
   try {
-    const { data, error } = await client.auth.verifyOtp({
-      email: pendingSignUpEmail,
+    // Try email OTP verification (supports 6 or 8 digit codes)
+    let { data, error } = await client.auth.verifyOtp({
+      email: pendingAuthEmail,
       token: token,
-      type: 'signup'
+      type: 'email'
     });
+
+    // Fallback attempt with 'magiclink' or 'signup' type if 'email' fails
+    if (error) {
+      const retry = await client.auth.verifyOtp({
+        email: pendingAuthEmail,
+        token: token,
+        type: 'magiclink'
+      });
+      if (!retry.error) {
+        data = retry.data;
+        error = null;
+      }
+    }
 
     if (error) throw error;
 
-    showToast('Email verified successfully! Logging you in...');
-    // Supabase will automatically fire onAuthStateChange with the session
+    showToast('Signed in successfully!');
+    // Supabase will automatically trigger onAuthStateChange
   } catch (err) {
     alert(err.message || 'Invalid or expired code. Please try again.');
   } finally {
@@ -211,12 +222,8 @@ otpVerifyForm.addEventListener('submit', async (e) => {
 otpCancelBtn.addEventListener('click', () => {
   otpVerifyForm.style.display = 'none';
   authForm.style.display = 'block';
-  authToggleContainer.style.display = 'block';
-  isSignUp = false;
-  authModeTitle.textContent = "Sign In";
-  authSubmitBtn.textContent = "Sign In";
-  authToggleBtn.textContent = "Need an account? Sign Up";
-  authPasswordInput.value = '';
+  pendingAuthEmail = '';
+  authEmailInput.focus();
 });
 
 logoutBtn.addEventListener('click', async () => {
