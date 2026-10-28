@@ -142,7 +142,16 @@ authForm.addEventListener('submit', async (e) => {
 
   try {
     if (isSignUp) {
-      const { data, error } = await client.auth.signUp({ email, password });
+      // Determine redirection URL for email confirmation
+      const redirectUrl = window.location.origin + window.location.pathname.replace(/\/([^\/]*)$/, '/') + 'verified.html';
+
+      const { data, error } = await client.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: redirectUrl
+        }
+      });
       if (error) throw error;
 
       // Check if Supabase requires email confirmation before a session is issued
