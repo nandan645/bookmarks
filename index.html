@@ -3,12 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bookmarks - Quick & Smart Link Hub</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>Bookmarks</title>
   <link rel="stylesheet" href="css/style.css">
-  <!-- Local Supabase JS Client (bundled to avoid CDN issues) -->
+  <!-- Local Supabase JS Client -->
   <script src="js/supabase.js"></script>
 </head>
 <body>
@@ -16,54 +13,52 @@
   <!-- Authentication Overlay -->
   <div id="authScreen" class="auth-screen">
     <div class="auth-card">
-      <div class="logo-icon" style="margin: 0 auto 1.25rem; width: 44px; height: 44px; font-size: 1.25rem;">⚡</div>
-      <h2 id="authModeTitle">Sign In to Bookmarks</h2>
-      <p>Organize, search, and securely share links with your team.</p>
+      <h2 id="authModeTitle">Sign In</h2>
+      <p>Save and organize your links in virtual folders.</p>
 
       <form id="authForm">
         <div class="form-group" style="text-align: left;">
-          <label for="authEmail">Email Address</label>
-          <input type="email" id="authEmail" class="form-control" placeholder="you@company.com" required autocomplete="email">
+          <label for="authEmail">Email</label>
+          <input type="email" id="authEmail" class="form-control" placeholder="you@example.com" required autocomplete="email">
         </div>
         <div class="form-group" style="text-align: left;">
           <label for="authPassword">Password</label>
           <input type="password" id="authPassword" class="form-control" placeholder="••••••••" required autocomplete="current-password">
         </div>
-        <button type="submit" id="authSubmitBtn" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 1rem;">Sign In</button>
+        <button type="submit" id="authSubmitBtn" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 0.5rem;">Sign In</button>
       </form>
 
-      <div style="margin-top: 1.25rem;">
-        <button id="authToggleBtn" class="btn btn-secondary" style="width: 100%; justify-content: center; font-size: 0.82rem;">Need an account? Sign Up</button>
+      <div style="margin-top: 1rem;">
+        <button id="authToggleBtn" class="btn btn-secondary" style="width: 100%; justify-content: center; font-size: 0.8rem;">Need an account? Sign Up</button>
       </div>
     </div>
   </div>
 
-  <!-- Main App Application Shell -->
+  <!-- Main App Shell -->
   <div class="app-container">
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="logo-area">
-        <div class="logo-icon">⚡</div>
         <h1>Bookmarks</h1>
       </div>
 
       <div class="nav-section">
-        <div class="nav-label">Navigation</div>
+        <div class="nav-label">General</div>
         <button id="navAll" class="nav-btn active">
           <div class="left-content">
-            <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
-            <span>All Bookmarks</span>
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+            <span>All Links</span>
           </div>
         </button>
         <button id="navFavorites" class="nav-btn">
           <div class="left-content">
-            <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             <span>Favorites</span>
           </div>
         </button>
         <button id="navShared" class="nav-btn">
           <div class="left-content">
-            <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             <span>Shared with Me</span>
           </div>
         </button>
@@ -71,7 +66,7 @@
 
       <div class="nav-section" style="flex: 1; display: flex; flex-direction: column;">
         <div class="nav-label">
-          <span>Virtual Folders</span>
+          <span>Folders</span>
           <button id="createFolderBtn" class="icon-btn-mini" title="New Folder">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           </button>
@@ -85,7 +80,7 @@
         <div class="user-profile">
           <span id="userEmail" class="user-email">user@domain.com</span>
           <button id="logoutBtn" class="icon-btn-mini" title="Sign Out">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
           </button>
         </div>
       </div>
@@ -95,14 +90,14 @@
     <main class="main-content">
       <header class="top-header">
         <div class="search-box-wrapper">
-          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input type="text" id="searchInput" class="search-input" placeholder="Search by title, url, tags... (/ to focus)">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" id="searchInput" class="search-input" placeholder="Search title, URL, or folders... (/ to focus)">
           <span class="kbd-shortcut">/</span>
         </div>
 
         <div class="top-actions">
           <button id="addBookmarkBtn" class="btn btn-primary">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             <span>Add Link</span>
           </button>
         </div>
@@ -110,14 +105,9 @@
 
       <div class="content-body">
         <div class="view-header">
-          <div>
-            <h2 id="viewTitle">All Bookmarks</h2>
-            <div id="viewCount" class="view-meta">0 links</div>
-          </div>
+          <h2 id="viewTitle">All Links</h2>
+          <div id="viewCount" class="view-meta">0 links</div>
         </div>
-
-        <!-- Tag Filter Pills -->
-        <div id="tagBar" class="tag-bar"></div>
 
         <!-- Bookmarks Grid -->
         <div id="bookmarkGrid" class="bookmark-grid">
@@ -131,33 +121,29 @@
   <div id="bookmarkModal" class="modal-backdrop">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 id="bookmarkModalTitle">Add New Bookmark</h3>
+        <h3 id="bookmarkModalTitle">Add Link</h3>
         <button class="icon-btn-mini modal-close">
-          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
       <form id="bookmarkForm">
         <div class="form-group">
-          <label for="bmUrl">Destination URL *</label>
-          <input type="url" id="bmUrl" class="form-control" placeholder="https://example.com/docs" required>
+          <label for="bmUrl">URL *</label>
+          <input type="url" id="bmUrl" class="form-control" placeholder="https://example.com" required>
         </div>
         <div class="form-group">
           <label for="bmTitle">Title *</label>
-          <input type="text" id="bmTitle" class="form-control" placeholder="Project Documentation" required>
+          <input type="text" id="bmTitle" class="form-control" placeholder="Page Title" required>
         </div>
         <div class="form-group">
           <label for="bmDesc">Description (Optional)</label>
-          <textarea id="bmDesc" class="form-control" rows="2" placeholder="Quick note on what this link is for..."></textarea>
+          <textarea id="bmDesc" class="form-control" rows="2" placeholder="Optional notes..."></textarea>
         </div>
         <div class="form-group">
-          <label for="bmTags">Tags (comma separated)</label>
-          <input type="text" id="bmTags" class="form-control" placeholder="docs, prod, dashboard">
-        </div>
-        <div class="form-group">
-          <label for="bookmarkFolderSelect">Folder</label>
-          <select id="bookmarkFolderSelect" class="form-control">
-            <option value="">(No Folder / Root)</option>
-          </select>
+          <label>Assign to Folders (Select multiple)</label>
+          <div id="folderCheckboxes" class="folder-checkboxes">
+            <!-- Dynamically populated checkboxes -->
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary modal-cancel">Cancel</button>
@@ -171,19 +157,19 @@
   <div id="folderModal" class="modal-backdrop">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>Create Virtual Folder</h3>
+        <h3>Create Folder</h3>
         <button class="icon-btn-mini modal-close">
-          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
       <form id="folderForm">
         <div class="form-group">
           <label for="folderName">Folder Name *</label>
-          <input type="text" id="folderName" class="form-control" placeholder="e.g. Infrastructure & DevOps" required>
+          <input type="text" id="folderName" class="form-control" placeholder="e.g. Work, Tools, Dev" required>
         </div>
         <div class="form-group">
-          <label for="folderColor">Tag Color</label>
-          <input type="color" id="folderColor" class="form-control" value="#6366f1" style="height: 42px; padding: 4px; cursor: pointer;">
+          <label for="folderColor">Color</label>
+          <input type="color" id="folderColor" class="form-control" value="#18181b" style="height: 38px; padding: 2px; cursor: pointer;">
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary modal-cancel">Cancel</button>
@@ -199,17 +185,17 @@
       <div class="modal-header">
         <div>
           <h3>Share Folder</h3>
-          <p id="shareFolderName" style="font-size: 0.85rem; color: var(--accent-primary); font-weight: 500;"></p>
+          <p id="shareFolderName" style="font-size: 0.82rem; color: var(--text-dim);"></p>
         </div>
         <button class="icon-btn-mini modal-close">
-          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
 
-      <form id="shareForm" style="margin-bottom: 1.5rem;">
-        <div style="display: flex; gap: 0.5rem;">
+      <form id="shareForm" style="margin-bottom: 1.25rem;">
+        <div style="display: flex; gap: 0.4rem;">
           <input type="email" id="shareEmail" class="form-control" placeholder="colleague@company.com" required style="flex: 1;">
-          <select id="shareRole" class="form-control" style="width: 100px;">
+          <select id="shareRole" class="form-control" style="width: 95px;">
             <option value="viewer">Viewer</option>
             <option value="editor">Editor</option>
           </select>
@@ -218,8 +204,8 @@
       </form>
 
       <div>
-        <label style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.5rem;">People with access</label>
-        <div id="sharedMembersList" style="max-height: 160px; overflow-y: auto;">
+        <label style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 0.4rem;">People with access</label>
+        <div id="sharedMembersList" style="max-height: 150px; overflow-y: auto;">
           <!-- Member rows injected here -->
         </div>
       </div>

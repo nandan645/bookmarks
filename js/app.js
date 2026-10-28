@@ -3,10 +3,8 @@ const client = window.supabaseClient;
 let currentUser = null;
 let bookmarks = [];
 let folders = [];
-let sharedFolderIds = new Set();
 let currentFilter = {
   folderId: 'all', // 'all', 'favorites', 'shared', or specific UUID
-  tag: null,
   searchQuery: ''
 };
 
@@ -23,11 +21,11 @@ let isSignUp = false;
 const userEmailEl = document.getElementById('userEmail');
 const logoutBtn = document.getElementById('logoutBtn');
 const bookmarkGrid = document.getElementById('bookmarkGrid');
-const tagBar = document.getElementById('tagBar');
 const searchInput = document.getElementById('searchInput');
 const folderListEl = document.getElementById('folderList');
 const viewTitle = document.getElementById('viewTitle');
 const viewCount = document.getElementById('viewCount');
+const folderCheckboxesEl = document.getElementById('folderCheckboxes');
 
 // Navigation Buttons
 const navAll = document.getElementById('navAll');
@@ -45,7 +43,7 @@ const folderForm = document.getElementById('folderForm');
 const shareForm = document.getElementById('shareForm');
 
 // Helper: Toast
-function showToast(message, type = 'info') {
+function showToast(message) {
   const container = document.getElementById('toastContainer');
   const toast = document.createElement('div');
   toast.className = 'toast';
@@ -53,8 +51,8 @@ function showToast(message, type = 'info') {
   container.appendChild(toast);
   setTimeout(() => {
     toast.style.opacity = '0';
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
+    setTimeout(() => toast.remove(), 200);
+  }, 2500);
 }
 
 // -----------------------------------------------------------------------------
@@ -67,7 +65,7 @@ authToggleBtn.addEventListener('click', () => {
     authSubmitBtn.textContent = "Sign Up";
     authToggleBtn.textContent = "Already have an account? Sign In";
   } else {
-    authModeTitle.textContent = "Sign In to Bookmarks";
+    authModeTitle.textContent = "Sign In";
     authSubmitBtn.textContent = "Sign In";
     authToggleBtn.textContent = "Need an account? Sign Up";
   }
@@ -85,7 +83,7 @@ authForm.addEventListener('submit', async (e) => {
     if (isSignUp) {
       const { data, error } = await client.auth.signUp({ email, password });
       if (error) throw error;
-      showToast('Account created! Logging you in...', 'success');
+      showToast('Account created! Logging in...');
     } else {
       const { data, error } = await client.auth.signInWithPassword({ email, password });
       if (error) throw error;
@@ -132,7 +130,7 @@ async function loadFolders() {
     if (error) throw error;
     folders = folderData || [];
     renderFolders();
-    populateFolderSelects();
+    populateFolderCheckboxes();
   } catch (err) {
     console.error('Error loading folders:', err);
   }
@@ -142,20 +140,22 @@ async function loadBookmarks() {
   try {
     const { data, error } = await client
       .from('bookmarks')
-      .select('*')
+      .select('*, bookmark_folders(folder_id)')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    bookmarks = data || [];
+    bookmarks = (data || []).map(b => ({
+      ...b,
+      folder_ids: (b.bookmark_folders || []).map(bf => bf.folder_id)
+    }));
     renderBookmarks();
-    renderTags();
   } catch (err) {
     console.error('Error loading bookmarks:', err);
   }
 }
 
 // -----------------------------------------------------------------------------
-// Render Functions
+// Render Folders & Checkboxes
 // -----------------------------------------------------------------------------
 function renderFolders() {
   folderListEl.innerHTML = '';
@@ -167,17 +167,17 @@ function renderFolders() {
     
     item.innerHTML = `
       <div class="folder-meta">
-        <span class="folder-color-dot" style="background-color: ${f.color || '#6366f1'}"></span>
-        <span class="truncate">${escapeHtml(f.name)}</span>
-        ${!isOwner ? '<span title="Shared with you" style="font-size: 0.75rem">👥</span>' : ''}
+        <span class="folder-color-dot" style="background-color: ${f.color || '#18181b'}"></span>
+        <span class="folder-name-text">${escapeHtml(f.name)}</span>
+        ${!isOwner ? '<span title="Shared with you" style="font-size: 0.72rem; opacity: 0.6;">👥</span>' : ''}
       </div>
       <div class="folder-actions">
         ${isOwner ? `
           <button class="icon-btn-mini share-folder-btn" title="Share Folder">
-            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8m-4-6l-4-4-4 4m4-4v13"/></svg>
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8m-4-6l-4-4-4 4m4-4v13"/></svg>
           </button>
           <button class="icon-btn-mini delete-folder-btn" title="Delete Folder">
-            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
           </button>
         ` : ''}
       </div>
@@ -199,76 +199,58 @@ function renderFolders() {
   });
 }
 
-function populateFolderSelects() {
-  const sel = document.getElementById('bookmarkFolderSelect');
-  sel.innerHTML = '<option value="">(No Folder / Root)</option>';
+function populateFolderCheckboxes(selectedIds = []) {
+  folderCheckboxesEl.innerHTML = '';
+  if (folders.length === 0) {
+    folderCheckboxesEl.innerHTML = '<span style="color:var(--text-dim); font-size: 0.78rem;">No folders created yet</span>';
+    return;
+  }
+
   folders.forEach(f => {
-    const opt = document.createElement('option');
-    opt.value = f.id;
-    opt.textContent = (f.owner_id === currentUser.id ? '' : '👥 ') + f.name;
-    sel.appendChild(opt);
+    const label = document.createElement('label');
+    label.className = 'folder-check-item';
+    const checked = selectedIds.includes(f.id) ? 'checked' : '';
+    label.innerHTML = `
+      <input type="checkbox" value="${f.id}" ${checked}>
+      <span class="folder-color-dot" style="background-color: ${f.color || '#18181b'}"></span>
+      <span>${escapeHtml(f.name)}</span>
+    `;
+    folderCheckboxesEl.appendChild(label);
   });
 }
 
-function renderTags() {
-  const allTags = new Set();
-  bookmarks.forEach(b => {
-    if (b.tags && Array.isArray(b.tags)) {
-      b.tags.forEach(t => allTags.add(t));
-    }
-  });
-
-  tagBar.innerHTML = '';
-  if (allTags.size === 0) return;
-
-  const allPill = document.createElement('button');
-  allPill.className = `tag-pill ${!currentFilter.tag ? 'active' : ''}`;
-  allPill.textContent = 'All Tags';
-  allPill.addEventListener('click', () => {
-    currentFilter.tag = null;
-    renderTags();
-    renderBookmarks();
-  });
-  tagBar.appendChild(allPill);
-
-  allTags.forEach(tag => {
-    const pill = document.createElement('button');
-    pill.className = `tag-pill ${currentFilter.tag === tag ? 'active' : ''}`;
-    pill.textContent = `#${tag}`;
-    pill.addEventListener('click', () => {
-      currentFilter.tag = currentFilter.tag === tag ? null : tag;
-      renderTags();
-      renderBookmarks();
-    });
-    tagBar.appendChild(pill);
-  });
-}
-
+// -----------------------------------------------------------------------------
+// Render Bookmarks
+// -----------------------------------------------------------------------------
 function renderBookmarks() {
   const filtered = bookmarks.filter(b => {
     // 1. Folder Filter
     if (currentFilter.folderId === 'favorites') {
       if (!b.is_favorite) return false;
     } else if (currentFilter.folderId === 'shared') {
-      const folder = folders.find(f => f.id === b.folder_id);
-      if (!folder || folder.owner_id === currentUser.id) return false;
+      const isShared = (b.folder_ids || []).some(fId => {
+        const folder = folders.find(f => f.id === fId);
+        return folder && folder.owner_id !== currentUser.id;
+      });
+      if (!isShared) return false;
     } else if (currentFilter.folderId !== 'all') {
-      if (b.folder_id !== currentFilter.folderId) return false;
+      if (!b.folder_ids || !b.folder_ids.includes(currentFilter.folderId)) return false;
     }
 
-    // 2. Tag Filter
-    if (currentFilter.tag) {
-      if (!b.tags || !b.tags.includes(currentFilter.tag)) return false;
-    }
-
-    // 3. Search Filter
+    // 2. Search Filter (title, url, description, folder names)
     if (currentFilter.searchQuery) {
       const q = currentFilter.searchQuery.toLowerCase();
       const matchTitle = b.title && b.title.toLowerCase().includes(q);
       const matchUrl = b.url && b.url.toLowerCase().includes(q);
       const matchDesc = b.description && b.description.toLowerCase().includes(q);
-      const matchTag = b.tags && b.tags.some(t => t.toLowerCase().includes(q));
-      if (!matchTitle && !matchUrl && !matchDesc && !matchTag) return false;
+      
+      const folderNames = (b.folder_ids || []).map(fId => {
+        const f = folders.find(folder => folder.id === fId);
+        return f ? f.name.toLowerCase() : '';
+      });
+      const matchFolder = folderNames.some(fn => fn.includes(q));
+
+      if (!matchTitle && !matchUrl && !matchDesc && !matchFolder) return false;
     }
 
     return true;
@@ -281,7 +263,7 @@ function renderBookmarks() {
     bookmarkGrid.innerHTML = `
       <div class="empty-state" style="grid-column: 1 / -1;">
         <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
-        <p>No bookmarks found.</p>
+        <p>No links found.</p>
       </div>
     `;
     return;
@@ -291,7 +273,6 @@ function renderBookmarks() {
     const card = document.createElement('div');
     card.className = 'bookmark-card';
     
-    // Domain & Favicon extraction
     let domain = '';
     try {
       domain = new URL(b.url).hostname;
@@ -299,6 +280,11 @@ function renderBookmarks() {
       domain = b.url;
     }
     const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+
+    // Folder Badges
+    const assignedFolders = (b.folder_ids || [])
+      .map(id => folders.find(f => f.id === id))
+      .filter(Boolean);
 
     card.innerHTML = `
       <div class="bookmark-card-top">
@@ -311,38 +297,42 @@ function renderBookmarks() {
           </a>
           <div class="bookmark-url">${escapeHtml(domain)}</div>
         </div>
-        <button class="icon-btn-mini fav-btn ${b.is_favorite ? 'text-amber-400' : ''}" title="Favorite">
-          <svg width="16" height="16" fill="${b.is_favorite ? '#f59e0b' : 'none'}" stroke="${b.is_favorite ? '#f59e0b' : 'currentColor'}" stroke-width="2" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <button class="icon-btn-mini fav-btn" title="Favorite">
+          <svg width="15" height="15" fill="${b.is_favorite ? '#f59e0b' : 'none'}" stroke="${b.is_favorite ? '#f59e0b' : 'currentColor'}" stroke-width="2" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
         </button>
       </div>
 
       ${b.description ? `<p class="bookmark-desc">${escapeHtml(b.description)}</p>` : ''}
 
       <div class="bookmark-footer">
-        <div class="bookmark-tags">
-          ${(b.tags || []).map(t => `<span class="bookmark-tag">#${escapeHtml(t)}</span>`).join('')}
+        <div class="bookmark-folders">
+          ${assignedFolders.map(f => `
+            <span class="bookmark-folder-badge">
+              <span class="folder-color-dot" style="background-color:${f.color || '#18181b'}"></span>
+              ${escapeHtml(f.name)}
+            </span>
+          `).join('')}
         </div>
         <div class="bookmark-actions">
           <button class="icon-btn-mini copy-btn" title="Copy Link">
-            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
           </button>
           <button class="icon-btn-mini edit-btn" title="Edit">
-            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
           ${b.owner_id === currentUser.id ? `
             <button class="icon-btn-mini del-btn" title="Delete">
-              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </button>
           ` : ''}
         </div>
       </div>
     `;
 
-    // Action events
     card.querySelector('.fav-btn').addEventListener('click', () => toggleFavorite(b));
     card.querySelector('.copy-btn').addEventListener('click', () => {
       navigator.clipboard.writeText(b.url);
-      showToast('Link copied to clipboard!');
+      showToast('Link copied');
     });
     card.querySelector('.edit-btn').addEventListener('click', () => openBookmarkModal(b));
     if (b.owner_id === currentUser.id) {
@@ -369,7 +359,7 @@ function setFolderFilter(fId, title) {
   renderBookmarks();
 }
 
-navAll.addEventListener('click', () => setFolderFilter('all', 'All Bookmarks'));
+navAll.addEventListener('click', () => setFolderFilter('all', 'All Links'));
 navFavorites.addEventListener('click', () => setFolderFilter('favorites', 'Favorites'));
 navShared.addEventListener('click', () => setFolderFilter('shared', 'Shared with Me'));
 
@@ -378,7 +368,7 @@ searchInput.addEventListener('input', (e) => {
   renderBookmarks();
 });
 
-// Quick keyboard shortcut: Press '/' to focus search
+// Shortcut: '/' focuses search
 window.addEventListener('keydown', (e) => {
   if (e.key === '/' && document.activeElement !== searchInput && !isModalOpen()) {
     e.preventDefault();
@@ -397,19 +387,25 @@ let editingBookmarkId = null;
 
 function openBookmarkModal(b = null) {
   editingBookmarkId = b ? b.id : null;
-  document.getElementById('bookmarkModalTitle').textContent = b ? 'Edit Bookmark' : 'Add New Bookmark';
+  document.getElementById('bookmarkModalTitle').textContent = b ? 'Edit Link' : 'Add Link';
   
   document.getElementById('bmUrl').value = b ? b.url : '';
   document.getElementById('bmTitle').value = b ? b.title : '';
   document.getElementById('bmDesc').value = b ? (b.description || '') : '';
-  document.getElementById('bmTags').value = b ? (b.tags || []).join(', ') : '';
-  document.getElementById('bookmarkFolderSelect').value = b ? (b.folder_id || '') : (currentFilter.folderId.length > 10 ? currentFilter.folderId : '');
+  
+  let selectedFolderIds = [];
+  if (b) {
+    selectedFolderIds = b.folder_ids || [];
+  } else if (currentFilter.folderId.length > 10) {
+    // If currently filtered on a folder, check that folder by default
+    selectedFolderIds = [currentFilter.folderId];
+  }
+  populateFolderCheckboxes(selectedFolderIds);
 
   bookmarkModal.classList.add('open');
   if (!b) document.getElementById('bmUrl').focus();
 }
 
-// Auto-fill title from URL if user pastes URL first
 document.getElementById('bmUrl').addEventListener('blur', (e) => {
   const urlVal = e.target.value.trim();
   const titleInput = document.getElementById('bmTitle');
@@ -426,41 +422,54 @@ bookmarkForm.addEventListener('submit', async (e) => {
   const url = document.getElementById('bmUrl').value.trim();
   const title = document.getElementById('bmTitle').value.trim();
   const description = document.getElementById('bmDesc').value.trim();
-  const rawTags = document.getElementById('bmTags').value;
-  const folder_id = document.getElementById('bookmarkFolderSelect').value || null;
 
-  const tags = rawTags
-    .split(',')
-    .map(t => t.trim().toLowerCase().replace(/^#/, ''))
-    .filter(Boolean);
+  // Get selected folder checkboxes
+  const checkedBoxes = folderCheckboxesEl.querySelectorAll('input[type="checkbox"]:checked');
+  const selectedFolderIds = Array.from(checkedBoxes).map(cb => cb.value);
 
   try {
+    let bookmarkId = editingBookmarkId;
+
     if (editingBookmarkId) {
       const { error } = await client
         .from('bookmarks')
-        .update({ url, title, description, tags, folder_id, updated_at: new Date().toISOString() })
+        .update({ url, title, description, updated_at: new Date().toISOString() })
         .eq('id', editingBookmarkId);
       if (error) throw error;
-      showToast('Bookmark updated!');
+
+      // Delete existing folder relations
+      await client.from('bookmark_folders').delete().eq('bookmark_id', editingBookmarkId);
+      showToast('Link updated');
     } else {
-      const { error } = await client
+      const { data, error } = await client
         .from('bookmarks')
         .insert([{
           owner_id: currentUser.id,
           url,
           title,
-          description,
-          tags,
-          folder_id
-        }]);
+          description
+        }])
+        .select()
+        .single();
       if (error) throw error;
-      showToast('Bookmark added!');
+      bookmarkId = data.id;
+      showToast('Link added');
+    }
+
+    // Insert new folder relations
+    if (selectedFolderIds.length > 0) {
+      const folderInserts = selectedFolderIds.map(fId => ({
+        bookmark_id: bookmarkId,
+        folder_id: fId
+      }));
+      const { error: relError } = await client.from('bookmark_folders').insert(folderInserts);
+      if (relError) console.error("Relation insert error:", relError);
     }
 
     bookmarkModal.classList.remove('open');
     await loadBookmarks();
   } catch (err) {
-    alert(err.message || 'Error saving bookmark');
+    alert(err.message || 'Error saving link');
   }
 });
 
@@ -479,11 +488,11 @@ async function toggleFavorite(b) {
 }
 
 async function deleteBookmark(id) {
-  if (!confirm('Are you sure you want to delete this bookmark?')) return;
+  if (!confirm('Delete this link?')) return;
   try {
     const { error } = await client.from('bookmarks').delete().eq('id', id);
     if (error) throw error;
-    showToast('Bookmark deleted');
+    showToast('Link deleted');
     await loadBookmarks();
   } catch (err) {
     alert(err.message);
@@ -491,11 +500,11 @@ async function deleteBookmark(id) {
 }
 
 // -----------------------------------------------------------------------------
-// Folder Operations (Create / Delete / Share)
+// Folder Operations
 // -----------------------------------------------------------------------------
 function openFolderModal() {
   document.getElementById('folderName').value = '';
-  document.getElementById('folderColor').value = '#6366f1';
+  document.getElementById('folderColor').value = '#18181b';
   folderModal.classList.add('open');
 }
 
@@ -519,13 +528,13 @@ folderForm.addEventListener('submit', async (e) => {
 });
 
 async function deleteFolder(folderId, name) {
-  if (!confirm(`Delete folder "${name}"? Bookmarks inside it will remain in root.`)) return;
+  if (!confirm(`Delete folder "${name}"? Links inside it won't be deleted.`)) return;
   try {
     const { error } = await client.from('folders').delete().eq('id', folderId);
     if (error) throw error;
     showToast('Folder deleted');
     if (currentFilter.folderId === folderId) {
-      setFolderFilter('all', 'All Bookmarks');
+      setFolderFilter('all', 'All Links');
     }
     await loadFolders();
     await loadBookmarks();
@@ -535,7 +544,7 @@ async function deleteFolder(folderId, name) {
 }
 
 // -----------------------------------------------------------------------------
-// Sharing Folder with Users / Emails
+// Folder Sharing
 // -----------------------------------------------------------------------------
 let activeSharingFolder = null;
 
@@ -551,7 +560,7 @@ async function openShareModal(folder) {
 
 async function refreshMemberList() {
   const listEl = document.getElementById('sharedMembersList');
-  listEl.innerHTML = '<p style="font-size:0.8rem; color:var(--text-dim)">Loading members...</p>';
+  listEl.innerHTML = '<p style="font-size:0.75rem; color:var(--text-dim)">Loading members...</p>';
 
   try {
     const { data, error } = await client
@@ -562,21 +571,21 @@ async function refreshMemberList() {
     if (error) throw error;
 
     if (!data || data.length === 0) {
-      listEl.innerHTML = '<p style="font-size:0.8rem; color:var(--text-dim)">Not shared with anyone yet.</p>';
+      listEl.innerHTML = '<p style="font-size:0.78rem; color:var(--text-dim)">Not shared with anyone yet.</p>';
       return;
     }
 
     listEl.innerHTML = '';
     data.forEach(m => {
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding: 0.4rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.85rem;';
+      row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding: 0.4rem 0; border-bottom: 1px solid var(--border-subtle); font-size: 0.82rem;';
       row.innerHTML = `
         <div>
           <span>${escapeHtml(m.shared_with_email)}</span>
-          <span class="badge" style="margin-left: 6px;">${m.role}</span>
+          <span style="font-size: 0.72rem; color: var(--text-dim); margin-left: 6px;">(${m.role})</span>
         </div>
         <button class="icon-btn-mini remove-share-btn" title="Revoke Access">
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       `;
 
@@ -592,7 +601,7 @@ async function refreshMemberList() {
       listEl.appendChild(row);
     });
   } catch (err) {
-    listEl.innerHTML = `<p style="color:var(--accent-danger); font-size:0.8rem">${err.message}</p>`;
+    listEl.innerHTML = `<p style="color:var(--accent-danger); font-size:0.78rem">${err.message}</p>`;
   }
 }
 
@@ -620,7 +629,7 @@ shareForm.addEventListener('submit', async (e) => {
       throw error;
     }
 
-    showToast(`Shared folder with ${email}`);
+    showToast(`Shared with ${email}`);
     document.getElementById('shareEmail').value = '';
     await refreshMemberList();
   } catch (err) {
@@ -629,7 +638,7 @@ shareForm.addEventListener('submit', async (e) => {
 });
 
 // -----------------------------------------------------------------------------
-// Generic Close Modals Setup
+// Modals Setup
 // -----------------------------------------------------------------------------
 document.querySelectorAll('.modal-close, .modal-cancel').forEach(btn => {
   btn.addEventListener('click', () => {
