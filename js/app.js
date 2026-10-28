@@ -670,47 +670,54 @@ function renderBookmarks() {
     const canEditAsGuest = guestFolderContext && (guestFolderContext.role === 'editor');
     const showEditActions = isOwner || canEditAsGuest;
 
+    const previewUrl = `https://image.thum.io/get/width/500/crop/650/${b.url}`;
+
     card.innerHTML = `
-      <div class="bookmark-card-top">
-        <div class="bookmark-favicon">
-          <img src="${faviconUrl}" alt="" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\\'http://www.w3.org/2000/svg\\\' fill=\\\'none\\\' stroke=\\\'%23999\\\' viewBox=\\\'0 0 24 24\\\'><path d=\\\'M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71\\\'/></svg>'"/>
-        </div>
-        <div class="bookmark-info">
-          <a href="${escapeHtml(b.url)}" target="_blank" rel="noopener noreferrer" class="bookmark-title" title="${escapeHtml(b.title)}">
-            ${escapeHtml(b.title)}
-          </a>
-          <div class="bookmark-url">${escapeHtml(domain)}</div>
-        </div>
-        ${!guestFolderContext ? `
-          <button class="icon-btn-mini fav-btn" title="Favorite">
-            <svg width="15" height="15" fill="${b.is_favorite ? '#f59e0b' : 'none'}" stroke="${b.is_favorite ? '#f59e0b' : 'currentColor'}" stroke-width="2" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          </button>
-        ` : ''}
+      <div class="bookmark-preview-thumb">
+        <img src="${previewUrl}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'"/>
       </div>
-
-      ${b.description ? `<p class="bookmark-desc">${escapeHtml(b.description)}</p>` : ''}
-
-      <div class="bookmark-footer">
-        <div class="bookmark-folders">
-          ${assignedFolders.map(f => `
-            <span class="bookmark-folder-badge">
-              <span class="folder-color-dot" style="background-color:${f.color || '#18181b'}"></span>
-              ${escapeHtml(f.name)}
-            </span>
-          `).join('')}
-        </div>
-        <div class="bookmark-actions">
-          <button class="icon-btn-mini copy-btn" title="Copy Link">
-            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-          </button>
-          ${showEditActions ? `
-            <button class="icon-btn-mini edit-btn" title="Edit">
-              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
-            <button class="icon-btn-mini del-btn" title="Delete">
-              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+      <div class="bookmark-card-body">
+        <div class="bookmark-card-top">
+          <div class="bookmark-favicon">
+            <img src="${faviconUrl}" alt="" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\\'http://www.w3.org/2000/svg\\\' fill=\\\'none\\\' stroke=\\\'%23999\\\' viewBox=\\\'0 0 24 24\\\'><path d=\\\'M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71\\\'/></svg>'"/>
+          </div>
+          <div class="bookmark-info">
+            <a href="${escapeHtml(b.url)}" target="_blank" rel="noopener noreferrer" class="bookmark-title" title="${escapeHtml(b.title)}">
+              ${escapeHtml(b.title)}
+            </a>
+            <div class="bookmark-url">${escapeHtml(domain)}</div>
+          </div>
+          ${!guestFolderContext ? `
+            <button class="icon-btn-mini fav-btn" title="Favorite">
+              <svg width="15" height="15" fill="${b.is_favorite ? '#f59e0b' : 'none'}" stroke="${b.is_favorite ? '#f59e0b' : 'currentColor'}" stroke-width="2" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             </button>
           ` : ''}
+        </div>
+
+        ${b.description ? `<p class="bookmark-desc">${escapeHtml(b.description)}</p>` : ''}
+
+        <div class="bookmark-footer">
+          <div class="bookmark-folders">
+            ${assignedFolders.map(f => `
+              <span class="bookmark-folder-badge">
+                <span class="folder-color-dot" style="background-color:${f.color || '#18181b'}"></span>
+                ${escapeHtml(f.name)}
+              </span>
+            `).join('')}
+          </div>
+          <div class="bookmark-actions">
+            <button class="icon-btn-mini copy-btn" title="Copy Link">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            </button>
+            ${showEditActions ? `
+              <button class="icon-btn-mini edit-btn" title="Edit">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <button class="icon-btn-mini del-btn" title="Delete">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            ` : ''}
+          </div>
         </div>
       </div>
     `;
